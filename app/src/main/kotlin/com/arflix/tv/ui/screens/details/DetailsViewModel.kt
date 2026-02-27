@@ -160,6 +160,8 @@ class DetailsViewModel @Inject constructor(
     private var vodAppendJob: kotlinx.coroutines.Job? = null
     private var loadStreamsJob: kotlinx.coroutines.Job? = null
     private var loadStreamsRequestId: Long = 0L
+    /** Set to true after loadDetails() child coroutines finish populating episodes/seasons. */
+    @Volatile private var initialLoadComplete = false
     private fun autoPlaySingleSourceKey() = profileManager.profileBooleanKey("auto_play_single_source")
     private fun autoPlayMinQualityKey() = profileManager.profileStringKey("auto_play_min_quality")
 
@@ -205,6 +207,7 @@ class DetailsViewModel @Inject constructor(
     fun loadDetails(mediaType: MediaType, mediaId: Int, initialSeason: Int? = null, initialEpisode: Int? = null) {
         currentMediaType = mediaType
         currentMediaId = mediaId
+        initialLoadComplete = false
         vodAppendJob?.cancel()
 
         viewModelScope.launch {
@@ -411,6 +414,7 @@ class DetailsViewModel @Inject constructor(
                             )
                         }
                     }
+                    initialLoadComplete = true
                 }
 
                 launch {
@@ -656,8 +660,10 @@ class DetailsViewModel @Inject constructor(
     fun refreshAfterPlayerReturn() {
         val tmdbId = currentMediaId
         if (tmdbId == 0) return
-        // Don't run during initial load — would overwrite seasonProgress with empty data
-        if (_uiState.value.isLoading) return
+        // Don't run during initial load — would overwrite episodes/seasonProgress with empty data.
+        // The isLoading guard alone is insufficient: cached items set isLoading=false immediately,
+        // but episodes haven't been populated yet. Wait for the episodes coroutine to finish.
+        if (_uiState.value.isLoading || !initialLoadComplete) return
         val mediaType = currentMediaType
 
         viewModelScope.launch {
@@ -685,17 +691,20 @@ class DetailsViewModel @Inject constructor(
             }
 
             // 2. Update episode watched badges and season progress
-            var updatedEpisodes = currentState.episodes
-            var updatedProgress = currentState.seasonProgress
-            if (mediaType == MediaType.TV && currentState.episodes.isNotEmpty()) {
+            // Read the LATEST state for episodes — the snapshot captured above may be stale
+            // if loadDetails() child coroutines populated episodes after we started.
+            val latestForEpisodes = _uiState.value
+            var updatedEpisodes = latestForEpisodes.episodes
+            var updatedProgress = latestForEpisodes.seasonProgress
+            if (mediaType == MediaType.TV && latestForEpisodes.episodes.isNotEmpty()) {
                 val prefix = "show_tmdb:$tmdbId:"
                 if (watchedKeys.any { it.startsWith(prefix) }) {
-                    updatedEpisodes = currentState.episodes.map { ep ->
+                    updatedEpisodes = latestForEpisodes.episodes.map { ep ->
                         val key = "show_tmdb:$tmdbId:${ep.seasonNumber}:${ep.episodeNumber}"
                         ep.copy(isWatched = ep.isWatched || watchedKeys.contains(key))
                     }
-                    val season = currentState.currentSeason
-                    val progress = currentState.seasonProgress.toMutableMap()
+                    val season = latestForEpisodes.currentSeason
+                    val progress = latestForEpisodes.seasonProgress.toMutableMap()
                     progress[season] = Pair(updatedEpisodes.count { it.isWatched }, updatedEpisodes.size)
                     updatedProgress = progress
                 }
@@ -721,9 +730,11 @@ class DetailsViewModel @Inject constructor(
             val latestState = _uiState.value
             _uiState.value = latestState.copy(
                 item = updatedItem ?: latestState.item,
-                episodes = updatedEpisodes,
+                // Only overwrite episodes if we actually computed watched badges;
+                // otherwise keep the latest (avoids blanking if episodes were populated concurrently)
+                episodes = if (updatedEpisodes.isNotEmpty()) updatedEpisodes else latestState.episodes,
                 // Only update seasonProgress if we actually computed new data; preserve existing otherwise
-                seasonProgress = if (updatedProgress !== currentState.seasonProgress) updatedProgress else latestState.seasonProgress,
+                seasonProgress = if (updatedProgress !== latestForEpisodes.seasonProgress) updatedProgress else latestState.seasonProgress,
                 playSeason = playTarget?.season ?: latestState.playSeason,
                 playEpisode = playTarget?.episode ?: latestState.playEpisode,
                 playLabel = playTarget?.label ?: latestState.playLabel,
