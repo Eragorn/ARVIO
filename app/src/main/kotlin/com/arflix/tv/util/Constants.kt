@@ -25,11 +25,11 @@ object Constants {
     const val TMDB_BASE_URL = "https://api.themoviedb.org/3/"
     const val TRAKT_API_URL = "https://api.trakt.tv/"
 
-    // Legacy API key references - these are stripped by ApiProxyInterceptor
-    // The real keys are stored securely on Supabase Edge Functions
-    const val TMDB_API_KEY = "PROXIED" // Stripped by interceptor, real key on server
-    const val TRAKT_CLIENT_ID = "PROXIED" // Stripped by interceptor, real key on server
-    const val TRAKT_CLIENT_SECRET = "PROXIED" // Stripped by interceptor, real key on server
+    // API keys — calls go directly to TMDB/Trakt (no edge function proxy).
+    // TMDB rate-limits per IP (40 req/10s), Trakt per client (1000 req/5min).
+    const val TMDB_API_KEY = "080380c1ad7b3967af3def25159e4374"
+    const val TRAKT_CLIENT_ID = "234d1a473e25d15ad05127370529a567547b7b86890bdc00f735ea1757d8d157"
+    const val TRAKT_CLIENT_SECRET = "" // Not needed for public API calls
 
     // Image URLs - High quality for TV (1080p+)
     const val IMAGE_BASE = "https://image.tmdb.org/t/p/w780"           // Posters: good quality

@@ -588,8 +588,13 @@ class HomeViewModel @Inject constructor(
         }
         viewModelScope.launch {
             try {
-                // Ensure Continue Watching appears once Trakt tokens are loaded
+                // Ensure Continue Watching appears once Trakt tokens are loaded.
+                // Wait for initial categories to load first so that the heavy Trakt
+                // CW fetch (50+ API calls) doesn't compete with TMDB catalog calls
+                // on the Supabase proxy, which would cause severe slowdowns.
                 traktRepository.isAuthenticated.filter { it }.first()
+                // Wait until base categories are populated (loadHomeData sets isLoading=false)
+                _uiState.filter { !it.isLoading && it.categories.any { c -> c.id != "continue_watching" } }.first()
                 refreshContinueWatchingOnly()
             } catch (e: Exception) {
                 System.err.println("HomeVM: auth observer CW refresh failed: ${e.message}")
@@ -725,12 +730,29 @@ class HomeViewModel @Inject constructor(
             heroItem
         }
 
+        // If CW preload already set a hero with a logo, preserve it — the preloaded
+        // hero from startup doesn't carry a logo URL and would cause a visible flash
+        // from logo → text → logo.
+        val currentHero = _uiState.value.heroItem
+        val currentLogo = _uiState.value.heroLogoUrl
+        val finalHero = if (currentHero != null && currentLogo != null) {
+            currentHero  // keep CW hero that already has a logo
+        } else {
+            adjustedHeroItem
+        }
+        val finalLogo = if (finalHero == currentHero && currentLogo != null) {
+            currentLogo  // keep the cached logo
+        } else if (adjustedHeroItem == heroItem) {
+            heroLogoUrl  // use whatever startup preloaded
+        } else {
+            null
+        }
         _uiState.value = _uiState.value.copy(
             isLoading = false,
             isInitialLoad = false,
             categories = filteredCategories,
-            heroItem = adjustedHeroItem,
-            heroLogoUrl = if (adjustedHeroItem == heroItem) heroLogoUrl else null,
+            heroItem = finalHero,
+            heroLogoUrl = finalLogo,
             error = null
         )
         _cardLogoUrls.value = snapshotLogoCache()
