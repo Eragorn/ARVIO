@@ -18,16 +18,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
-data class SearchSuggestion(
-    val title: String,
-    val mediaType: MediaType,
-    val mediaId: Int,
-    val year: String = ""
-)
-
 data class SearchUiState(
     val query: String = "",
-    val suggestions: List<SearchSuggestion> = emptyList(),
     val isLoading: Boolean = false,
     val results: List<MediaItem> = emptyList(),
     val movieResults: List<MediaItem> = emptyList(),
@@ -45,7 +37,6 @@ class SearchViewModel @Inject constructor(
     val uiState: StateFlow<SearchUiState> = _uiState.asStateFlow()
 
     private var searchJob: Job? = null
-    private var suggestionJob: Job? = null
     private var cachedSuggestionQuery: String = ""
     private var cachedSuggestionResults: List<MediaItem> = emptyList()
 
@@ -65,17 +56,10 @@ class SearchViewModel @Inject constructor(
             cachedSuggestionQuery = ""
             cachedSuggestionResults = emptyList()
             _uiState.value = SearchUiState()
-            suggestionJob?.cancel()
             searchJob?.cancel()
             return
         }
-        debounceSuggestions()
         debounceSearch()
-    }
-
-    fun applySuggestion(suggestion: SearchSuggestion) {
-        _uiState.value = _uiState.value.copy(query = suggestion.title)
-        search()
     }
 
     fun search() {
@@ -100,7 +84,6 @@ class SearchViewModel @Inject constructor(
                 // Separate into movies and TV shows
                 val movies = sortedResults.filter { it.mediaType == MediaType.MOVIE }
                 val tvShows = sortedResults.filter { it.mediaType == MediaType.TV }
-                val suggestions = buildSuggestions(query, sortedResults)
                 val topForLogos = (movies.take(16) + tvShows.take(16)).distinctBy { "${it.mediaType}_${it.id}" }
                 val logoMap = withContext(Dispatchers.IO) {
                     topForLogos.map { item ->
@@ -118,7 +101,6 @@ class SearchViewModel @Inject constructor(
                     results = sortedResults,
                     movieResults = movies,
                     tvResults = tvShows,
-                    suggestions = suggestions,
                     cardLogoUrls = logoMap
                 )
             } catch (e: Exception) {
@@ -137,30 +119,6 @@ class SearchViewModel @Inject constructor(
             if (_uiState.value.query.length >= 2) {
                 search()
             }
-        }
-    }
-
-    private fun debounceSuggestions() {
-        suggestionJob?.cancel()
-        suggestionJob = viewModelScope.launch {
-            delay(180)
-            val query = _uiState.value.query.trim()
-            if (query.length < 2) {
-                _uiState.value = _uiState.value.copy(suggestions = emptyList())
-                return@launch
-            }
-
-            val sortedResults = if (cachedSuggestionQuery.equals(query, ignoreCase = true) && cachedSuggestionResults.isNotEmpty()) {
-                cachedSuggestionResults
-            } else {
-                val fetched = runCatching { mediaRepository.search(query) }.getOrDefault(emptyList())
-                val sorted = sortResults(query, fetched)
-                cachedSuggestionQuery = query
-                cachedSuggestionResults = sorted
-                sorted
-            }
-
-            _uiState.value = _uiState.value.copy(suggestions = buildSuggestions(query, sortedResults))
         }
     }
 
@@ -195,25 +153,8 @@ class SearchViewModel @Inject constructor(
         )
     }
 
-    private fun buildSuggestions(query: String, sortedResults: List<MediaItem>): List<SearchSuggestion> {
-        val queryLower = query.lowercase()
-        return sortedResults
-            .filter { item -> item.title.lowercase().contains(queryLower) }
-            .distinctBy { "${it.mediaType}_${it.id}" }
-            .take(8)
-            .map { item ->
-                SearchSuggestion(
-                    title = item.title,
-                    mediaType = item.mediaType,
-                    mediaId = item.id,
-                    year = item.year
-                )
-            }
-    }
-
     fun clearSearch() {
         searchJob?.cancel()
-        suggestionJob?.cancel()
         cachedSuggestionQuery = ""
         cachedSuggestionResults = emptyList()
         _uiState.value = SearchUiState()

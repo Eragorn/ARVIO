@@ -7,6 +7,14 @@ All notable changes to this project are documented in this file.
 ### Added
 - (Nothing yet)
 
+## [1.8.4] - 2026-03-04
+
+### Changed
+- App version label and package version updated to `1.8.4` (`versionCode 184`).
+
+### Removed
+- Search suggestions/typeahead flow from Search screen, including D-pad suggestion navigation and inline suggestion list.
+
 ## [1.8.3] - 2026-03-04
 
 ### Added

@@ -25,7 +25,7 @@ android {
         minSdk = 21
         targetSdk = 34
         versionCode = 184
-        versionName = "1.8.3"
+        versionName = "1.8.4"
 
         // Support both 32-bit and 64-bit devices (required for Google Play since 2019)
         ndk {
