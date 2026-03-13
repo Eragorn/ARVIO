@@ -812,6 +812,7 @@ fun SettingsScreen(
             AppUpdateModal(
                 update = uiState.availableAppUpdate,
                 isChecking = uiState.isCheckingForUpdate,
+                isAppUpdateAvailable = uiState.isAppUpdateAvailable,
                 isDownloading = uiState.isDownloadingAppUpdate,
                 progress = uiState.appUpdateDownloadProgress,
                 errorMessage = uiState.appUpdateError,
@@ -1313,6 +1314,7 @@ private enum class Zone {
 private fun AppUpdateModal(
     update: com.arflix.tv.updater.AppUpdate?,
     isChecking: Boolean,
+    isAppUpdateAvailable: Boolean,
     isDownloading: Boolean,
     progress: Float?,
     errorMessage: String?,
@@ -1324,6 +1326,11 @@ private fun AppUpdateModal(
     onInstall: () -> Unit
 ) {
     var focusedIndex by remember { mutableIntStateOf(2) }
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
 
     androidx.compose.ui.window.Dialog(
         onDismissRequest = onDismiss,
@@ -1338,6 +1345,8 @@ private fun AppUpdateModal(
                 .width(760.dp)
                 .background(BackgroundElevated, RoundedCornerShape(18.dp))
                 .padding(28.dp)
+                .focusRequester(focusRequester)
+                .focusable()
                 .onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     when (event.key) {
@@ -1367,11 +1376,26 @@ private fun AppUpdateModal(
 
             val subtitle = when {
                 !isSelfUpdateSupported -> "This install is managed by the Play Store."
-                update != null -> "${update.title} (${update.tag})"
+                downloadedApkPath != null && update != null -> "${update.title} is ready to install."
+                isAppUpdateAvailable && update != null -> "Update available: ${update.title} (${update.tag})"
+                update != null -> "You already have the latest version installed."
                 isChecking -> "Checking GitHub Releases..."
                 else -> "No release information available."
             }
             Text(subtitle, style = ArflixTypography.body, color = TextSecondary)
+
+            if (update != null && !isChecking && !isDownloading) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = if (isAppUpdateAvailable) {
+                        "Current version ${BuildConfig.VERSION_NAME} -> latest ${update.tag}"
+                    } else {
+                        "Current version ${BuildConfig.VERSION_NAME} is up to date"
+                    },
+                    style = ArflixTypography.caption,
+                    color = TextSecondary.copy(alpha = 0.78f)
+                )
+            }
 
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -1434,6 +1458,11 @@ private fun UnknownSourcesModal(
     onOpenSettings: () -> Unit
 ) {
     var focusedIndex by remember { mutableIntStateOf(1) }
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
 
     androidx.compose.ui.window.Dialog(
         onDismissRequest = onDismiss,
@@ -1448,6 +1477,8 @@ private fun UnknownSourcesModal(
                 .width(620.dp)
                 .background(BackgroundElevated, RoundedCornerShape(18.dp))
                 .padding(28.dp)
+                .focusRequester(focusRequester)
+                .focusable()
                 .onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     when (event.key) {
@@ -1488,10 +1519,13 @@ private fun UpdateActionButton(
 ) {
     val background = when {
         !enabled -> Color.White.copy(alpha = 0.06f)
-        isFocused && highlighted -> SuccessGreen
-        isFocused -> Color.White.copy(alpha = 0.18f)
-        highlighted -> Pink.copy(alpha = 0.7f)
-        else -> Color.White.copy(alpha = 0.1f)
+        isFocused -> Color.White
+        else -> Color.Black.copy(alpha = 0.72f)
+    }
+    val textColor = when {
+        !enabled -> TextSecondary.copy(alpha = 0.6f)
+        isFocused -> Color.Black
+        else -> Color.White
     }
 
     Box(
@@ -1499,7 +1533,7 @@ private fun UpdateActionButton(
             .background(background, RoundedCornerShape(10.dp))
             .border(
                 width = if (isFocused) 2.dp else 0.dp,
-                color = if (highlighted) SuccessGreen.copy(alpha = 0.5f) else Pink,
+                color = if (isFocused) Color.White.copy(alpha = 0.92f) else Color.White.copy(alpha = 0.12f),
                 shape = RoundedCornerShape(10.dp)
             )
             .padding(horizontal = 18.dp, vertical = 12.dp),
@@ -1508,7 +1542,7 @@ private fun UpdateActionButton(
         Text(
             text = label,
             style = ArflixTypography.button,
-            color = if (enabled) Color.White else TextSecondary.copy(alpha = 0.6f)
+            color = textColor
         )
     }
 }
@@ -2316,7 +2350,8 @@ private fun AccountsSettings(
                 !isSelfUpdateSupported -> "This install is managed by the Play Store"
                 downloadedApkPath != null -> "Latest update downloaded and ready to install"
                 isCheckingForUpdate -> "Checking GitHub Releases for a newer APK"
-                isAppUpdateAvailable -> "${availableAppUpdate?.title ?: "Update available"} ready to download"
+                isAppUpdateAvailable -> "Update available: ${availableAppUpdate?.title ?: availableAppUpdate?.tag ?: "latest release"}"
+                availableAppUpdate != null -> "You already have ARVIO v${BuildConfig.VERSION_NAME}"
                 else -> "Check GitHub Releases for the latest ARVIO APK"
             },
             actionLabel = when {
