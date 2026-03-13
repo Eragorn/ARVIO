@@ -18,6 +18,7 @@ import com.arflix.tv.data.repository.TraktSyncService
 import com.arflix.tv.data.repository.ContinueWatchingItem
 import com.arflix.tv.data.repository.CatalogRepository
 import com.arflix.tv.data.repository.CloudSyncRepository
+import com.arflix.tv.data.repository.LauncherContinueWatchingRepository
 import com.arflix.tv.data.repository.StreamRepository
 import com.arflix.tv.data.repository.IptvRepository
 import com.arflix.tv.data.repository.SyncStatus
@@ -33,7 +34,6 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -46,9 +46,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.cancelAndJoin
+import java.text.SimpleDateFormat
 import java.util.Collections
+import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 
@@ -60,6 +61,7 @@ data class HomeUiState(
     // Current hero (may update during transitions)
     val heroItem: MediaItem? = null,
     val heroLogoUrl: String? = null,
+    val heroOverviewOverride: String? = null,
     val cardLogoUrls: Map<String, String> = emptyMap(),
     // Previous hero for crossfade (Phase 2.1)
     val previousHeroItem: MediaItem? = null,
@@ -88,6 +90,7 @@ class HomeViewModel @Inject constructor(
     private val watchHistoryRepository: WatchHistoryRepository,
     private val watchlistRepository: WatchlistRepository,
     private val cloudSyncRepository: CloudSyncRepository,
+    private val launcherContinueWatchingRepository: LauncherContinueWatchingRepository,
     private val imageLoader: ImageLoader,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
@@ -96,7 +99,8 @@ class HomeViewModel @Inject constructor(
         val releaseDate: String?,
         val imdbRating: String,
         val tmdbRating: String,
-        val budget: Long?
+        val budget: Long?,
+        val overview: String
     )
 
     private data class CategoryPaginationState(
@@ -116,6 +120,110 @@ class HomeViewModel @Inject constructor(
 
     /** Check if a MediaItem represents an IPTV channel. */
     fun isIptvItem(item: MediaItem): Boolean = item.status?.startsWith(IPTV_STATUS_PREFIX) == true
+
+    private fun isActionableMediaItem(item: MediaItem): Boolean {
+        return item.id > 0 && !item.isPlaceholder
+    }
+
+    private fun continueWatchingKey(mediaType: MediaType, id: Int): String {
+        return "${mediaType.name}:$id"
+    }
+
+    private fun overviewLooksTruncated(overview: String): Boolean {
+        val value = overview.trim()
+        return value.isBlank() || value.endsWith("...") || value.length < 140
+    }
+
+    private suspend fun resolveBestOverview(item: MediaItem, candidateOverview: String): String {
+        val base = candidateOverview.trim()
+        if (!overviewLooksTruncated(base) || item.title.isBlank()) {
+            return base
+        }
+
+        val searchMatches = runCatching { mediaRepository.search(item.title) }.getOrDefault(emptyList())
+        val bestMatch = searchMatches
+            .asSequence()
+            .filter { match -> match.overview.isNotBlank() }
+            .maxByOrNull { match ->
+                val titleBonus = if (match.title.equals(item.title, ignoreCase = true)) 1_000 else 0
+                val typeBonus = if (match.mediaType == item.mediaType) 120 else 0
+                val qualityBonus = if (!overviewLooksTruncated(match.overview)) 80 else 0
+                titleBonus + typeBonus + qualityBonus + match.overview.length
+            }
+
+        val improved = bestMatch?.overview?.trim().orEmpty()
+        return if (
+            improved.isNotBlank() &&
+            (improved.length > base.length || (!improved.endsWith("...") && base.endsWith("...")))
+        ) {
+            improved
+        } else {
+            base
+        }
+    }
+
+    private fun isEpisodeAlreadyAired(rawAirDate: String): Boolean {
+        val value = rawAirDate.trim()
+        if (value.isEmpty()) return true
+        return try {
+            val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+            parser.isLenient = false
+            val parsed = parser.parse(value) ?: return true
+            parsed.time <= System.currentTimeMillis()
+        } catch (_: Exception) {
+            true
+        }
+    }
+
+    private suspend fun sanitizeContinueWatchingItems(items: List<ContinueWatchingItem>): List<ContinueWatchingItem> {
+        if (items.isEmpty()) return emptyList()
+
+        val seasonEpisodesCache = HashMap<Pair<Int, Int>, List<com.arflix.tv.data.model.Episode>?>()
+
+        return items.mapNotNull { item ->
+            if (item.mediaType != MediaType.TV) {
+                return@mapNotNull item
+            }
+
+            val season = item.season
+            val episode = item.episode
+            if (season == null || episode == null) {
+                return@mapNotNull item
+            }
+
+            val cacheKey = item.id to season
+            val seasonEpisodes = if (seasonEpisodesCache.containsKey(cacheKey)) {
+                seasonEpisodesCache[cacheKey]
+            } else {
+                val fetched = runCatching {
+                    mediaRepository.getSeasonEpisodes(item.id, season)
+                }.getOrNull()
+                seasonEpisodesCache[cacheKey] = fetched
+                fetched
+            }
+
+            // Strict validation: if we can't validate the target episode, don't show it.
+            if (seasonEpisodes == null) {
+                return@mapNotNull null
+            }
+
+            // Season loaded but has no known episodes => invalid/future target.
+            if (seasonEpisodes.isEmpty()) {
+                return@mapNotNull null
+            }
+
+            val matchedEpisode = seasonEpisodes.firstOrNull { it.episodeNumber == episode }
+                ?: return@mapNotNull null
+
+            if (!isEpisodeAlreadyAired(matchedEpisode.airDate)) {
+                return@mapNotNull null
+            }
+
+            item.copy(
+                episodeTitle = item.episodeTitle ?: matchedEpisode.name
+            )
+        }
+    }
 
     /** Extract the IPTV channel ID from a MediaItem's status field. */
     fun getIptvChannelId(item: MediaItem): String? =
@@ -299,6 +407,7 @@ class HomeViewModel @Inject constructor(
     private var lastContinueWatchingItems: List<MediaItem> = emptyList()
     private var lastContinueWatchingUpdateMs: Long = 0L
     private var lastResolvedBaseCategories: List<Category> = emptyList()
+    private val dismissedContinueWatchingKeys = Collections.synchronizedSet(mutableSetOf<String>())
     private val CONTINUE_WATCHING_REFRESH_MS = 45_000L
     private val WATCHED_BADGES_REFRESH_MS = 90_000L
     private var lastWatchedBadgesRefreshMs: Long = 0L
@@ -538,7 +647,12 @@ class HomeViewModel @Inject constructor(
         // Instantly show Continue Watching from disk cache before anything else loads.
         viewModelScope.launch {
             try {
-                val cached = traktRepository.preloadContinueWatchingCache()
+                val dismissedKeys = runCatching {
+                    traktRepository.getDismissedContinueWatchingShowKeys()
+                }.getOrDefault(emptySet())
+                val cached = traktRepository.preloadContinueWatchingCache().filterNot { item ->
+                    dismissedKeys.contains("${item.mediaType.name}:${item.id}")
+                }
                 if (cached.isNotEmpty()) {
                     // Set hero item IMMEDIATELY from raw CW data (before the slow
                     // merge step) so the hero section, clear logo, and overview text
@@ -555,6 +669,7 @@ class HomeViewModel @Inject constructor(
                             heroItem = rawFirstItem,
                             heroLogoUrl = heroLogo
                         )
+                        hydrateHeroDetailsIfNeeded(rawFirstItem)
                     }
 
                     // Now do the slower merge with local resume data
@@ -600,7 +715,7 @@ class HomeViewModel @Inject constructor(
                 traktRepository.isAuthenticated.filter { it }.first()
                 // Wait until base categories are populated (loadHomeData sets isLoading=false)
                 _uiState.filter { !it.isLoading && it.categories.any { c -> c.id != "continue_watching" } }.first()
-                refreshContinueWatchingOnly()
+                refreshContinueWatchingOnly(force = true)
             } catch (e: Exception) {
                 System.err.println("HomeVM: auth observer CW refresh failed: ${e.message}")
             }
@@ -608,7 +723,7 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             traktSyncService.syncEvents.collect { status ->
                 if (status == SyncStatus.COMPLETED) {
-                    refreshContinueWatchingOnly()
+                    refreshContinueWatchingOnly(force = true)
                 }
             }
         }
@@ -942,7 +1057,7 @@ class HomeViewModel @Inject constructor(
                 val itemsToPreload = categories
                     .take(initialLogoPrefetchRows)
                     .flatMap { it.items.take(initialLogoPrefetchItemsPerRow) }
-                    .filter { !isIptvItem(it) }
+                    .filter { isActionableMediaItem(it) && !isIptvItem(it) }
 
                 // Separate: items already in logo cache (instant) vs items needing fetch
                 val cachedLogoResults = mutableMapOf<String, String>()
@@ -972,6 +1087,7 @@ class HomeViewModel @Inject constructor(
                             heroItem = heroItem,
                             heroLogoUrl = heroLogoFromCache ?: _uiState.value.heroLogoUrl
                         )
+                        heroItem?.let { hydrateHeroDetailsIfNeeded(it) }
                         _cardLogoUrls.value = snapshotLogoCache()
                     }
                 }
@@ -1020,6 +1136,7 @@ class HomeViewModel @Inject constructor(
                     isAuthenticated = traktRepository.isAuthenticated.first(),
                     error = null
                 )
+                heroItem?.let { hydrateHeroDetailsIfNeeded(it) }
                 _cardLogoUrls.value = snapshotLogoCache()
                 refreshWatchedBadges()
 
@@ -1062,56 +1179,7 @@ class HomeViewModel @Inject constructor(
                     if (requestId != loadHomeRequestId) return@cw
                     delay(if (isLowRamDevice) 2_200L else 1_200L)
                     if (requestId != loadHomeRequestId) return@cw
-                    val continueWatchingDeferred = async {
-                        try {
-                            traktRepository.getContinueWatching()
-                        } catch (_: Exception) {
-                            emptyList()
-                        }
-                    }
-                    // Also query history fallback so cloud-synced progress can appear
-                    // even when Trakt isn't connected for this profile.
-                    val historyDeferred: Deferred<List<ContinueWatchingItem>> = async {
-                        loadContinueWatchingFromHistory()
-                    }
-
-                    // Show history as interim data while Trakt loads, but ONLY if we don't
-                    // already have real CW items (from disk cache). Replacing cached CW with
-                    // history data causes a visible jumble because they have different order.
-                    run {
-                        val alreadyHasRealCW = _uiState.value.categories.any {
-                            it.id == "continue_watching" && it.items.isNotEmpty() &&
-                                it.items.none { item -> item.isPlaceholder }
-                        }
-                        if (!alreadyHasRealCW) {
-                            val historyFallback = try {
-                                withTimeoutOrNull(4_000L) { historyDeferred.await() } ?: emptyList()
-                            } catch (_: Exception) { emptyList() }
-                            if (historyFallback.isNotEmpty() && !continueWatchingDeferred.isCompleted) {
-                                if (requestId != loadHomeRequestId) return@cw
-                                val mergedHistory = mergeContinueWatchingResumeData(historyFallback)
-                                val historyCW = Category(
-                                    id = "continue_watching",
-                                    title = "Continue Watching",
-                                    items = mergedHistory.map { it.toMediaItem() }
-                                )
-                                historyCW.items.forEach { mediaRepository.cacheItem(it) }
-                                val updated = _uiState.value.categories.toMutableList()
-                                val index = updated.indexOfFirst { it.id == "continue_watching" }
-                                if (index >= 0) updated[index] = historyCW else updated.add(0, historyCW)
-                                _uiState.value = _uiState.value.copy(categories = updated)
-                            }
-                        }
-                    }
-
-                    // Wait for Trakt fetch to complete without cancelling it.
-                    // Previous 6s timeout was too aggressive for Trakt-connected profiles
-                    // with many watched shows (50+ progress API calls) and caused data loss.
-                    val freshContinueWatching = try {
-                        continueWatchingDeferred.await()
-                    } catch (_: Exception) {
-                        emptyList()
-                    }
+                    val freshContinueWatching = resolveContinueWatchingItems(forceFresh = true)
                     if (requestId != loadHomeRequestId) return@cw
 
                     if (freshContinueWatching.isNotEmpty()) {
@@ -1317,6 +1385,7 @@ class HomeViewModel @Inject constructor(
 
                 uniqueNewItems.forEach { mediaRepository.cacheItem(it) }
                 val logoEntries = uniqueNewItems.take(6).mapNotNull { item ->
+                    if (!isActionableMediaItem(item) || isIptvItem(item)) return@mapNotNull null
                     val key = "${item.mediaType}_${item.id}"
                     if (hasCachedLogo(key) || !logoFetchInFlight.add(key)) return@mapNotNull null
                     val logo = runCatching {
@@ -1435,7 +1504,62 @@ class HomeViewModel @Inject constructor(
         loadHomeData()
     }
 
-    fun refreshContinueWatchingOnly() {
+    private suspend fun resolveContinueWatchingItems(forceFresh: Boolean): List<ContinueWatchingItem> {
+        val traktItems = if (forceFresh) {
+            runCatching { traktRepository.getContinueWatching() }.getOrDefault(emptyList())
+        } else {
+            val cached = traktRepository.getCachedContinueWatching()
+            if (cached.isNotEmpty()) cached else runCatching { traktRepository.getContinueWatching() }.getOrDefault(emptyList())
+        }
+        val localItems = runCatching { traktRepository.getLocalContinueWatching() }.getOrDefault(emptyList())
+        val historyItems = loadContinueWatchingFromHistory()
+
+        // Merge all sources so local/cloud progress appears immediately even when
+        // Trakt playback endpoints lag behind.
+        val mergedByShow = LinkedHashMap<String, ContinueWatchingItem>()
+        fun mergeItem(source: ContinueWatchingItem) {
+            val key = "${source.mediaType}:${source.id}"
+            val existing = mergedByShow[key]
+            if (existing == null) {
+                mergedByShow[key] = source
+                return
+            }
+            val picked = if (source.progress >= existing.progress) source else existing
+            mergedByShow[key] = picked.copy(
+                progress = maxOf(existing.progress, source.progress),
+                resumePositionSeconds = maxOf(existing.resumePositionSeconds, source.resumePositionSeconds),
+                durationSeconds = maxOf(existing.durationSeconds, source.durationSeconds),
+                season = source.season ?: existing.season,
+                episode = source.episode ?: existing.episode,
+                episodeTitle = source.episodeTitle ?: existing.episodeTitle,
+                overview = source.overview.ifBlank { existing.overview },
+                backdropPath = source.backdropPath ?: existing.backdropPath,
+                posterPath = source.posterPath ?: existing.posterPath,
+                imdbRating = source.imdbRating.ifBlank { existing.imdbRating },
+                duration = source.duration.ifBlank { existing.duration }
+            )
+        }
+
+        historyItems.forEach(::mergeItem)
+        localItems.forEach(::mergeItem)
+        traktItems.forEach(::mergeItem)
+
+        val persistedDismissedKeys = runCatching {
+            traktRepository.getDismissedContinueWatchingShowKeys()
+        }.getOrDefault(emptySet())
+
+        val sanitizedItems = sanitizeContinueWatchingItems(mergedByShow.values.toList())
+
+        return sanitizedItems
+            .filterNot { item ->
+                val showKey = continueWatchingKey(item.mediaType, item.id)
+                dismissedContinueWatchingKeys.contains(showKey) || persistedDismissedKeys.contains(showKey)
+            }
+            .filter { it.progress in 1..99 }
+            .take(Constants.MAX_CONTINUE_WATCHING)
+    }
+
+    fun refreshContinueWatchingOnly(force: Boolean = false) {
         // Don't cancel an in-progress Trakt fetch - restarting a fetch that takes
         // 10+ seconds (424 watched shows, 41 filtered, 50 progress API calls) wastes
         // time and causes Continue Watching to never appear. Multiple callers
@@ -1453,28 +1577,11 @@ class HomeViewModel @Inject constructor(
                 val hasPlaceholders = existingContinueWatching?.items?.any { it.isPlaceholder } == true
 
                 // Allow refresh if we have placeholders (need to replace them), otherwise throttle
-                if (!hasPlaceholders && now - lastContinueWatchingUpdateMs < CONTINUE_WATCHING_REFRESH_MS) {
+                if (!force && !hasPlaceholders && now - lastContinueWatchingUpdateMs < CONTINUE_WATCHING_REFRESH_MS) {
                     return@launch
                 }
 
-                val continueWatching = try {
-                    traktRepository.getContinueWatching()
-                } catch (_: Exception) {
-                    emptyList()
-                }
-                val cachedContinueWatching = traktRepository.getCachedContinueWatching()
-                val historyFallback = if (continueWatching.isEmpty() && cachedContinueWatching.isEmpty()) {
-                    loadContinueWatchingFromHistory()
-                } else {
-                    emptyList()
-                }
-                // Priority: Fresh Trakt data > Cached data > History fallback > Last known good data
-                val resolvedContinueWatching = when {
-                    continueWatching.isNotEmpty() -> continueWatching
-                    cachedContinueWatching.isNotEmpty() -> cachedContinueWatching
-                    historyFallback.isNotEmpty() -> historyFallback
-                    else -> emptyList()
-                }
+                val resolvedContinueWatching = resolveContinueWatchingItems(forceFresh = force)
 
                 if (resolvedContinueWatching.isNotEmpty()) {
                     val mergedContinueWatching = mergeContinueWatchingResumeData(resolvedContinueWatching)
@@ -1513,11 +1620,21 @@ class HomeViewModel @Inject constructor(
                         // Continue Watching exists with real data - preserve it exactly as is
                         return@launch
                     } else if (lastContinueWatchingItems.isNotEmpty()) {
+                        val persistedDismissedKeys = runCatching {
+                            traktRepository.getDismissedContinueWatchingShowKeys()
+                        }.getOrDefault(emptySet())
+                        val safeItems = lastContinueWatchingItems.filterNot { item ->
+                            val showKey = continueWatchingKey(item.mediaType, item.id)
+                            dismissedContinueWatchingKeys.contains(showKey) || persistedDismissedKeys.contains(showKey)
+                        }
+                        if (safeItems.isEmpty()) {
+                            return@launch
+                        }
                         // UI doesn't have Continue Watching but we have last known good items - restore them
                         val continueWatchingCategory = Category(
                             id = "continue_watching",
                             title = "Continue Watching",
-                            items = lastContinueWatchingItems
+                            items = safeItems
                         )
                         latestCategories.add(0, continueWatchingCategory)
                         _uiState.value = _uiState.value.copy(categories = latestCategories)
@@ -1699,6 +1816,10 @@ class HomeViewModel @Inject constructor(
      * Uses fast-scroll detection for smoother experience during rapid navigation
      */
     fun updateHeroItem(item: MediaItem) {
+        if (!isActionableMediaItem(item)) {
+            return
+        }
+
         val cacheKey = "${item.mediaType}_${item.id}"
         val cachedLogo = getCachedLogo(cacheKey)
 
@@ -1745,7 +1866,7 @@ class HomeViewModel @Inject constructor(
             scheduleHeroDetailsFetch(item, fastScrolling)
 
             // Fetch logo async if not cached (skip IPTV — uses channel logo directly)
-            if (currentCachedLogo == null && !isIptvItem(item)) {
+            if (currentCachedLogo == null && isActionableMediaItem(item) && !isIptvItem(item)) {
                 try {
                     val logoUrl = withContext(networkDispatcher) {
                         mediaRepository.getLogoUrl(item.mediaType, item.id)
@@ -1784,8 +1905,60 @@ class HomeViewModel @Inject constructor(
             previousHeroLogoUrl = currentState.heroLogoUrl,
             heroItem = item,
             heroLogoUrl = logoUrl,
+            heroOverviewOverride = null,
             isHeroTransitioning = true
         )
+    }
+
+    private fun hydrateHeroDetailsIfNeeded(item: MediaItem) {
+        val normalizedOverview = item.overview.trim()
+        val looksTruncated = normalizedOverview.endsWith("...") || normalizedOverview.length < 120
+        if (normalizedOverview.isNotBlank() && !looksTruncated && item.duration.isNotBlank() && item.duration != "0m") {
+            return
+        }
+
+        heroDetailsJob?.cancel()
+        heroDetailsJob = viewModelScope.launch(networkDispatcher) {
+            try {
+                val details = runCatching {
+                    if (item.mediaType == MediaType.MOVIE) {
+                        mediaRepository.getMovieDetails(item.id)
+                    } else {
+                        mediaRepository.getTvDetails(item.id)
+                    }
+                }.getOrNull()
+                val resolvedOverview = resolveBestOverview(
+                    item = item,
+                    candidateOverview = details?.overview?.ifBlank { item.overview } ?: item.overview
+                )
+                val detailsKey = "${item.mediaType}_${item.id}"
+                heroDetailsCache[detailsKey] = HeroDetailsSnapshot(
+                    duration = details?.duration.orEmpty(),
+                    releaseDate = details?.releaseDate,
+                    imdbRating = details?.imdbRating.orEmpty(),
+                    tmdbRating = details?.tmdbRating.orEmpty(),
+                    budget = details?.budget,
+                    overview = resolvedOverview
+                )
+
+                val latestHero = _uiState.value.heroItem
+                if (latestHero?.id == item.id && latestHero.mediaType == item.mediaType) {
+                    _uiState.value = _uiState.value.copy(
+                        heroItem = latestHero.copy(
+                            duration = details?.duration?.ifEmpty { latestHero.duration } ?: latestHero.duration,
+                            releaseDate = details?.releaseDate ?: latestHero.releaseDate,
+                            imdbRating = details?.imdbRating?.ifEmpty { latestHero.imdbRating } ?: latestHero.imdbRating,
+                            tmdbRating = details?.tmdbRating?.ifEmpty { latestHero.tmdbRating } ?: latestHero.tmdbRating,
+                            budget = details?.budget ?: latestHero.budget,
+                            overview = resolvedOverview.ifBlank { latestHero.overview }
+                        ),
+                        heroOverviewOverride = resolvedOverview.ifBlank { latestHero.overview },
+                        isHeroTransitioning = false
+                    )
+                }
+            } catch (_: Exception) {
+            }
+        }
     }
 
     private fun scheduleHeroDetailsFetch(item: MediaItem, fastScrolling: Boolean) {
@@ -1802,8 +1975,10 @@ class HomeViewModel @Inject constructor(
                             releaseDate = cachedDetails.releaseDate ?: currentHero.releaseDate,
                             imdbRating = cachedDetails.imdbRating.ifEmpty { currentHero.imdbRating },
                             tmdbRating = cachedDetails.tmdbRating.ifEmpty { currentHero.tmdbRating },
-                            budget = cachedDetails.budget ?: currentHero.budget
+                            budget = cachedDetails.budget ?: currentHero.budget,
+                            overview = cachedDetails.overview.ifBlank { currentHero.overview }
                         ),
+                        heroOverviewOverride = cachedDetails.overview.ifBlank { currentHero.overview },
                         isHeroTransitioning = false
                     )
                 }
@@ -1821,28 +1996,37 @@ class HomeViewModel @Inject constructor(
             if (currentHero?.id != item.id) return@launch
 
             try {
-                val details = if (item.mediaType == MediaType.MOVIE) {
-                    mediaRepository.getMovieDetails(item.id)
-                } else {
-                    mediaRepository.getTvDetails(item.id)
-                }
+                val details = runCatching {
+                    if (item.mediaType == MediaType.MOVIE) {
+                        mediaRepository.getMovieDetails(item.id)
+                    } else {
+                        mediaRepository.getTvDetails(item.id)
+                    }
+                }.getOrNull()
+                val resolvedOverview = resolveBestOverview(
+                    item = item,
+                    candidateOverview = details?.overview?.ifBlank { currentHero.overview } ?: currentHero.overview
+                )
 
                 val updatedItem = currentHero.copy(
-                    duration = details.duration.ifEmpty { currentHero.duration },
-                    releaseDate = details.releaseDate ?: currentHero.releaseDate,
-                    imdbRating = details.imdbRating.ifEmpty { currentHero.imdbRating },
-                    tmdbRating = details.tmdbRating.ifEmpty { currentHero.tmdbRating },
-                    budget = details.budget ?: currentHero.budget
+                    duration = details?.duration?.ifEmpty { currentHero.duration } ?: currentHero.duration,
+                    releaseDate = details?.releaseDate ?: currentHero.releaseDate,
+                    imdbRating = details?.imdbRating?.ifEmpty { currentHero.imdbRating } ?: currentHero.imdbRating,
+                    tmdbRating = details?.tmdbRating?.ifEmpty { currentHero.tmdbRating } ?: currentHero.tmdbRating,
+                    budget = details?.budget ?: currentHero.budget,
+                    overview = resolvedOverview.ifBlank { currentHero.overview }
                 )
                 heroDetailsCache[detailsKey] = HeroDetailsSnapshot(
-                    duration = details.duration,
-                    releaseDate = details.releaseDate,
-                    imdbRating = details.imdbRating,
-                    tmdbRating = details.tmdbRating,
-                    budget = details.budget
+                    duration = details?.duration.orEmpty(),
+                    releaseDate = details?.releaseDate,
+                    imdbRating = details?.imdbRating.orEmpty(),
+                    tmdbRating = details?.tmdbRating.orEmpty(),
+                    budget = details?.budget,
+                    overview = resolvedOverview
                 )
                 _uiState.value = _uiState.value.copy(
                     heroItem = updatedItem,
+                    heroOverviewOverride = resolvedOverview.ifBlank { updatedItem.overview },
                     isHeroTransitioning = false
                 )
             } catch (e: Exception) {
@@ -1882,6 +2066,7 @@ class HomeViewModel @Inject constructor(
 
             val focusWindowItems = (startIndex..endIndex)
                 .mapNotNull { category.items.getOrNull(it) }
+                .filter { isActionableMediaItem(it) }
 
             val itemsToLoad = focusWindowItems.filter { item ->
                 val key = "${item.mediaType}_${item.id}"
@@ -1945,6 +2130,7 @@ class HomeViewModel @Inject constructor(
             val maxLogoItems = if (prioritizeVisible) prioritizedLogoPrefetchItems else incrementalLogoPrefetchItems
 
             val itemsToLoad = category.items.take(maxLogoItems).filter { item ->
+                if (!isActionableMediaItem(item)) return@filter false
                 if (isIptvItem(item)) return@filter false  // IPTV items use channel logo directly
                 val key = "${item.mediaType}_${item.id}"
                 !hasCachedLogo(key) && logoFetchInFlight.add(key)
@@ -2096,7 +2282,7 @@ class HomeViewModel @Inject constructor(
                                 position = 60L
                             )
                             lastContinueWatchingUpdateMs = 0L
-                            refreshContinueWatchingOnly()
+                            refreshContinueWatchingOnly(force = true)
                         } catch (_: Exception) {}
                     } else {
                         _uiState.value = _uiState.value.copy(
@@ -2105,6 +2291,7 @@ class HomeViewModel @Inject constructor(
                         )
                     }
                 }
+                runCatching { launcherContinueWatchingRepository.refreshForCurrentProfile() }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     toastMessage = "Failed to update watched status",
@@ -2191,7 +2378,7 @@ class HomeViewModel @Inject constructor(
                             )
                             // Reset throttle so refresh actually runs
                             lastContinueWatchingUpdateMs = 0L
-                            refreshContinueWatchingOnly()
+                            refreshContinueWatchingOnly(force = true)
                         } catch (_: Exception) {}
                     } else {
                         _uiState.value = _uiState.value.copy(
@@ -2200,6 +2387,7 @@ class HomeViewModel @Inject constructor(
                         )
                     }
                 }
+                runCatching { launcherContinueWatchingRepository.refreshForCurrentProfile() }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     toastMessage = "Failed to update watched status",
@@ -2222,10 +2410,13 @@ class HomeViewModel @Inject constructor(
             try {
                 val season = if (item.mediaType == MediaType.TV) item.nextEpisode?.seasonNumber else null
                 val episode = if (item.mediaType == MediaType.TV) item.nextEpisode?.episodeNumber else null
+                dismissedContinueWatchingKeys.add(continueWatchingKey(item.mediaType, item.id))
 
                 watchHistoryRepository.removeFromHistory(item.id, season, episode)
                 traktRepository.deletePlaybackForContent(item.id, item.mediaType)
+                traktRepository.removeFromContinueWatchingCache(item.id, null, null)
                 traktRepository.dismissContinueWatching(item)
+                runCatching { cloudSyncRepository.pushToCloud() }
 
                 val updatedCategories = _uiState.value.categories.map { category ->
                     if (category.id == "continue_watching") {
@@ -2242,6 +2433,7 @@ class HomeViewModel @Inject constructor(
                     toastMessage = "Removed from Continue Watching",
                     toastType = ToastType.SUCCESS
                 )
+                runCatching { launcherContinueWatchingRepository.refreshForCurrentProfile() }
                 updatedCategories.firstOrNull { it.id == "continue_watching" }?.let { category ->
                     lastContinueWatchingItems = category.items
                     lastContinueWatchingUpdateMs = SystemClock.elapsedRealtime()

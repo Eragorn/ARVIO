@@ -24,8 +24,10 @@ android {
         // Lower minSdk to maximize compatibility and avoid "There was a problem parsing the package".
         minSdk = 21
         targetSdk = 34
-        versionCode = 184
-        versionName = "1.8.4"
+        versionCode = 190
+        versionName = "1.9"
+        buildConfigField("String", "GITHUB_OWNER", "\"ProdigyV21\"")
+        buildConfigField("String", "GITHUB_REPO", "\"ARVIO\"")
 
         // Support both 32-bit and 64-bit devices (required for Google Play since 2019)
         ndk {
@@ -190,6 +192,7 @@ dependencies {
 
     // Leanback (TV compliance, browse fragments if needed)
     implementation("androidx.leanback:leanback:1.1.0-rc02")
+    implementation("androidx.tvprovider:tvprovider:1.1.0")
 
     // ExoPlayer / Media3 for video playback - version 1.3.1 for latest codec support
     val media3Version = "1.3.1"

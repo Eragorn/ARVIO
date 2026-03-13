@@ -5,6 +5,7 @@ import android.text.method.PasswordTransformationMethod
 import android.os.SystemClock
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
+import com.arflix.tv.BuildConfig
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
@@ -78,6 +79,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.widget.doAfterTextChanged
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -85,8 +87,11 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.arflix.tv.data.model.CatalogConfig
 import com.arflix.tv.data.model.CatalogSourceType
-import com.arflix.tv.ui.components.Sidebar
+import com.arflix.tv.ui.components.AppTopBar
+import com.arflix.tv.ui.components.AppTopBarContentTopInset
 import com.arflix.tv.ui.components.SidebarItem
+import com.arflix.tv.ui.components.topBarFocusedItem
+import com.arflix.tv.ui.components.topBarMaxIndex
 import com.arflix.tv.ui.theme.ArflixTypography
 import com.arflix.tv.ui.theme.BackgroundDark
 import com.arflix.tv.ui.theme.BackgroundElevated
@@ -115,7 +120,7 @@ fun SettingsScreen(
 
     var isSidebarFocused by remember { mutableStateOf(false) }
     val hasProfile = currentProfile != null
-    val maxSidebarIndex = if (hasProfile) SidebarItem.entries.size else SidebarItem.entries.size - 1
+    val maxSidebarIndex = topBarMaxIndex(hasProfile)
     var sidebarFocusIndex by remember { mutableIntStateOf(if (hasProfile) 5 else 4) } // SETTINGS
     var sectionIndex by remember { mutableIntStateOf(0) }
     var contentFocusIndex by remember { mutableIntStateOf(0) }
@@ -205,7 +210,7 @@ fun SettingsScreen(
             1 -> 2 // IPTV
             2 -> uiState.catalogs.size // Catalogs
             3 -> uiState.addons.size // Addons
-            4 -> 2 // Accounts
+            4 -> 3 // Accounts
             else -> 0
         }.coerceAtLeast(1)
 
@@ -287,18 +292,22 @@ fun SettingsScreen(
                                     }
                                 }
                                 Zone.SECTION -> {
-                                    activeZone = Zone.SIDEBAR
-                                    isSidebarFocused = true
+                                    Unit
                                 }
-                                else -> {}
+                                Zone.SIDEBAR -> {
+                                    if (sidebarFocusIndex > 0) {
+                                        sidebarFocusIndex = (sidebarFocusIndex - 1).coerceIn(0, maxSidebarIndex)
+                                    }
+                                }
                             }
                             true
                         }
                         Key.DirectionRight -> {
                             when (activeZone) {
                                 Zone.SIDEBAR -> {
-                                    activeZone = Zone.SECTION
-                                    isSidebarFocused = false
+                                    if (sidebarFocusIndex < maxSidebarIndex) {
+                                        sidebarFocusIndex = (sidebarFocusIndex + 1).coerceIn(0, maxSidebarIndex)
+                                    }
                                 }
                                 Zone.SECTION -> {
                                     activeZone = Zone.CONTENT
@@ -321,15 +330,16 @@ fun SettingsScreen(
                         }
                         Key.DirectionUp -> {
                             when (activeZone) {
-                                Zone.SIDEBAR -> if (sidebarFocusIndex > 0) {
-                                    sidebarFocusIndex = (sidebarFocusIndex - 1).coerceIn(0, maxSidebarIndex)
-                                }
+                                Zone.SIDEBAR -> Unit
                                 Zone.SECTION -> {
                                     if (sectionIndex > 0) {
                                         sectionIndex--
                                         contentFocusIndex = 0 // Reset content focus when changing section
                                         addonActionIndex = 0
                                         catalogActionIndex = 0
+                                    } else {
+                                        activeZone = Zone.SIDEBAR
+                                        isSidebarFocused = true
                                     }
                                 }
                                 Zone.CONTENT -> {
@@ -337,6 +347,8 @@ fun SettingsScreen(
                                         contentFocusIndex--
                                         addonActionIndex = 0 // Reset to toggle when changing rows
                                         catalogActionIndex = 0
+                                    } else {
+                                        activeZone = Zone.SECTION
                                     }
                                 }
                             }
@@ -344,8 +356,9 @@ fun SettingsScreen(
                         }
                         Key.DirectionDown -> {
                             when (activeZone) {
-                                Zone.SIDEBAR -> if (sidebarFocusIndex < maxSidebarIndex) {
-                                    sidebarFocusIndex = (sidebarFocusIndex + 1).coerceIn(0, maxSidebarIndex)
+                                Zone.SIDEBAR -> {
+                                    activeZone = Zone.SECTION
+                                    isSidebarFocused = false
                                 }
                                 Zone.SECTION -> {
                                     if (sectionIndex < sections.size - 1) {
@@ -362,7 +375,7 @@ fun SettingsScreen(
                                         1 -> 2 // IPTV: Configure + Refresh + Delete
                                         2 -> uiState.catalogs.size // Catalogs: Add + N catalogs
                                         3 -> uiState.addons.size // Addons: N addons + "Add Custom" button
-                                        4 -> 2 // Accounts: Cloud + Trakt + Switch Profile
+                                        4 -> 3 // Accounts: Cloud + Trakt + Switch Profile + App Update
                                         else -> 0
                                     }
                                     if (contentFocusIndex < maxIndex) {
@@ -383,13 +396,13 @@ fun SettingsScreen(
                                     if (hasProfile && sidebarFocusIndex == 0) {
                                         onSwitchProfile()
                                     } else {
-                                        val itemIndex = if (hasProfile) sidebarFocusIndex - 1 else sidebarFocusIndex
-                                        when (SidebarItem.entries[itemIndex]) {
+                                        when (topBarFocusedItem(sidebarFocusIndex, hasProfile)) {
                                             SidebarItem.SEARCH -> onNavigateToSearch()
                                             SidebarItem.HOME -> onNavigateToHome()
                                             SidebarItem.TV -> onNavigateToTv()
                                             SidebarItem.WATCHLIST -> onNavigateToWatchlist()
                                             SidebarItem.SETTINGS -> { /* Already here */ }
+                                            null -> Unit
                                         }
                                     }
                                 }
@@ -484,6 +497,13 @@ fun SettingsScreen(
                                                 2 -> { // Switch Profile
                                                     onSwitchProfile()
                                                 }
+                                                3 -> { // App Update
+                                                    if (uiState.downloadedApkPath != null) {
+                                                        viewModel.installAppUpdateOrRequestPermission()
+                                                    } else {
+                                                        viewModel.checkForAppUpdates(force = true, showNoUpdateFeedback = true)
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -497,23 +517,25 @@ fun SettingsScreen(
                 } else false
             }
     ) {
-        Row(modifier = Modifier.fillMaxSize()) {
-            // Sidebar
-            Sidebar(
-                selectedItem = SidebarItem.SETTINGS,
-                isSidebarFocused = activeZone == Zone.SIDEBAR,
-                focusedIndex = sidebarFocusIndex,
-                profile = currentProfile,
-                onProfileClick = onSwitchProfile
-            )
-            
+        AppTopBar(
+            selectedItem = SidebarItem.SETTINGS,
+            isFocused = activeZone == Zone.SIDEBAR,
+            focusedIndex = sidebarFocusIndex,
+            profile = currentProfile
+        )
+
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = AppTopBarContentTopInset)
+        ) {
             // Settings internal sidebar
             Column(
                 modifier = Modifier
                     .width(280.dp)
                     .fillMaxSize()
                     .background(BackgroundDark)
-                    .padding(vertical = 80.dp, horizontal = 24.dp)
+                    .padding(vertical = 32.dp, horizontal = 24.dp)
             ) {
                 Text(
                     text = "Settings",
@@ -521,7 +543,7 @@ fun SettingsScreen(
                     color = TextPrimary,
                     modifier = Modifier
                         .padding(start = 16.dp)
-                        .padding(bottom = 32.dp)
+                        .padding(bottom = 24.dp)
                 )
                 
                 sections.forEachIndexed { index, section ->
@@ -545,13 +567,13 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.weight(1f))
                 
                 Text(
-                    text = "ARVIO V1.8.4",
+                    text = "ARVIO V${BuildConfig.VERSION_NAME}",
                     style = ArflixTypography.caption,
                     color = TextSecondary.copy(alpha = 0.5f),
                     modifier = Modifier.padding(start = 16.dp)
                 )
             }
-            
+
             // Content area
             Column(
                 modifier = Modifier
@@ -611,13 +633,20 @@ fun SettingsScreen(
                         traktCode = uiState.traktCode?.userCode,
                         traktUrl = uiState.traktCode?.verificationUrl,
                         isTraktPolling = uiState.isTraktPolling,
+                        isSelfUpdateSupported = uiState.isSelfUpdateSupported,
+                        isCheckingForUpdate = uiState.isCheckingForUpdate,
+                        isAppUpdateAvailable = uiState.isAppUpdateAvailable,
+                        availableAppUpdate = uiState.availableAppUpdate,
+                        downloadedApkPath = uiState.downloadedApkPath,
                         focusedIndex = if (activeZone == Zone.CONTENT) contentFocusIndex else -1,
                         onConnectCloud = { viewModel.startCloudAuth() },
                         onDisconnectCloud = { viewModel.logout() },
                         onConnectTrakt = { viewModel.startTraktAuth() },
                         onCancelTrakt = { viewModel.cancelTraktAuth() },
                         onDisconnectTrakt = { viewModel.disconnectTrakt() },
-                        onSwitchProfile = onSwitchProfile
+                        onSwitchProfile = onSwitchProfile,
+                        onCheckUpdates = { viewModel.checkForAppUpdates(force = true, showNoUpdateFeedback = true) },
+                        onInstallUpdate = { viewModel.installAppUpdateOrRequestPermission() }
                     )
                 }
             }
@@ -776,6 +805,29 @@ fun SettingsScreen(
                 isWorking = uiState.isCloudAuthWorking,
                 onDismiss = { viewModel.cancelCloudAuth() },
                 onUseEmailPassword = { viewModel.openCloudEmailPasswordDialog() }
+            )
+        }
+
+        if (uiState.showAppUpdateDialog) {
+            AppUpdateModal(
+                update = uiState.availableAppUpdate,
+                isChecking = uiState.isCheckingForUpdate,
+                isDownloading = uiState.isDownloadingAppUpdate,
+                progress = uiState.appUpdateDownloadProgress,
+                errorMessage = uiState.appUpdateError,
+                downloadedApkPath = uiState.downloadedApkPath,
+                isSelfUpdateSupported = uiState.isSelfUpdateSupported,
+                onDismiss = { viewModel.dismissAppUpdateDialog() },
+                onIgnore = { viewModel.ignoreAppUpdate() },
+                onDownload = { viewModel.downloadAppUpdate() },
+                onInstall = { viewModel.installAppUpdateOrRequestPermission() }
+            )
+        }
+
+        if (uiState.showUnknownSourcesDialog) {
+            UnknownSourcesModal(
+                onDismiss = { viewModel.dismissAppUpdateDialog() },
+                onOpenSettings = { viewModel.openUnknownSourcesSettings() }
             )
         }
 
@@ -1054,6 +1106,13 @@ private fun CloudPairModal(
     onDismiss: () -> Unit,
     onUseEmailPassword: () -> Unit,
 ) {
+    val effectiveVerificationUrl = remember(verificationUrl, userCode) {
+        verificationUrl.ifBlank {
+            userCode.takeIf { it.isNotBlank() }?.let { code ->
+                "https://auth.arvio.tv/?code=$code"
+            }.orEmpty()
+        }
+    }
     // Focus order: 0 cancel, 1 email/password
     var focusedIndex by remember { mutableIntStateOf(1) }
 
@@ -1119,7 +1178,7 @@ private fun CloudPairModal(
                     modifier = Modifier.padding(bottom = 12.dp)
                 )
 
-                if (verificationUrl.isNotBlank()) {
+                if (effectiveVerificationUrl.isNotBlank()) {
                     Box(
                         modifier = Modifier
                             .size(qrContainerSize)
@@ -1128,7 +1187,7 @@ private fun CloudPairModal(
                         contentAlignment = Alignment.Center
                     ) {
                         QrCodeImage(
-                            data = verificationUrl,
+                            data = effectiveVerificationUrl,
                             sizePx = qrBitmapSizePx,
                             modifier = Modifier.fillMaxSize(),
                             foreground = android.graphics.Color.BLACK,
@@ -1247,6 +1306,211 @@ private fun CloudPairModal(
 
 private enum class Zone {
     SIDEBAR, SECTION, CONTENT
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun AppUpdateModal(
+    update: com.arflix.tv.updater.AppUpdate?,
+    isChecking: Boolean,
+    isDownloading: Boolean,
+    progress: Float?,
+    errorMessage: String?,
+    downloadedApkPath: String?,
+    isSelfUpdateSupported: Boolean,
+    onDismiss: () -> Unit,
+    onIgnore: () -> Unit,
+    onDownload: () -> Unit,
+    onInstall: () -> Unit
+) {
+    var focusedIndex by remember { mutableIntStateOf(2) }
+
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = false,
+            usePlatformDefaultWidth = false
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .width(760.dp)
+                .background(BackgroundElevated, RoundedCornerShape(18.dp))
+                .padding(28.dp)
+                .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    when (event.key) {
+                        Key.Back, Key.Escape -> { onDismiss(); true }
+                        Key.DirectionLeft -> {
+                            focusedIndex = (focusedIndex - 1).coerceAtLeast(0)
+                            true
+                        }
+                        Key.DirectionRight -> {
+                            focusedIndex = (focusedIndex + 1).coerceAtMost(2)
+                            true
+                        }
+                        Key.Enter, Key.DirectionCenter -> {
+                            when (focusedIndex) {
+                                0 -> onDismiss()
+                                1 -> onIgnore()
+                                2 -> if (downloadedApkPath != null) onInstall() else onDownload()
+                            }
+                            true
+                        }
+                        else -> false
+                    }
+                }
+        ) {
+            Text("App Update", style = ArflixTypography.sectionTitle, color = TextPrimary)
+            Spacer(modifier = Modifier.height(10.dp))
+
+            val subtitle = when {
+                !isSelfUpdateSupported -> "This install is managed by the Play Store."
+                update != null -> "${update.title} (${update.tag})"
+                isChecking -> "Checking GitHub Releases..."
+                else -> "No release information available."
+            }
+            Text(subtitle, style = ArflixTypography.body, color = TextSecondary)
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (!errorMessage.isNullOrBlank()) {
+                Text(errorMessage, style = ArflixTypography.body, color = Pink)
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            when {
+                isDownloading -> {
+                    Text("Downloading update...", style = ArflixTypography.body, color = TextPrimary)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    androidx.compose.material3.LinearProgressIndicator(
+                        progress = progress ?: 0f,
+                        modifier = Modifier.fillMaxWidth(),
+                        color = SuccessGreen,
+                        trackColor = Color.White.copy(alpha = 0.08f)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = progress?.let { "${(it * 100).toInt()}%" } ?: "Preparing...",
+                        style = ArflixTypography.caption,
+                        color = TextSecondary
+                    )
+                }
+                downloadedApkPath != null -> {
+                    Text("The latest ARVIO update has been downloaded and is ready to install.", style = ArflixTypography.body, color = TextPrimary)
+                }
+                !update?.notes.isNullOrBlank() -> {
+                    Text(
+                        text = update!!.notes.take(900),
+                        style = ArflixTypography.caption.copy(lineHeight = 18.sp),
+                        color = TextSecondary,
+                        modifier = Modifier.heightIn(max = 260.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                UpdateActionButton("Close", focusedIndex == 0, onDismiss)
+                UpdateActionButton("Ignore", focusedIndex == 1, onIgnore)
+                UpdateActionButton(
+                    if (downloadedApkPath != null) "Install" else "Download",
+                    focusedIndex == 2,
+                    if (downloadedApkPath != null) onInstall else onDownload,
+                    highlighted = true,
+                    enabled = isSelfUpdateSupported && !isChecking
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun UnknownSourcesModal(
+    onDismiss: () -> Unit,
+    onOpenSettings: () -> Unit
+) {
+    var focusedIndex by remember { mutableIntStateOf(1) }
+
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = false,
+            usePlatformDefaultWidth = false
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .width(620.dp)
+                .background(BackgroundElevated, RoundedCornerShape(18.dp))
+                .padding(28.dp)
+                .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    when (event.key) {
+                        Key.Back, Key.Escape -> { onDismiss(); true }
+                        Key.DirectionLeft -> { focusedIndex = 0; true }
+                        Key.DirectionRight -> { focusedIndex = 1; true }
+                        Key.Enter, Key.DirectionCenter -> {
+                            if (focusedIndex == 0) onDismiss() else onOpenSettings()
+                            true
+                        }
+                        else -> false
+                    }
+                }
+        ) {
+            Text("Allow Unknown Sources", style = ArflixTypography.sectionTitle, color = TextPrimary)
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                "Allow installs from unknown sources for ARVIO so the downloaded update APK can be installed.",
+                style = ArflixTypography.body,
+                color = TextSecondary
+            )
+            Spacer(modifier = Modifier.height(24.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                UpdateActionButton("Close", focusedIndex == 0, onDismiss)
+                UpdateActionButton("Open Settings", focusedIndex == 1, onOpenSettings, highlighted = true)
+            }
+        }
+    }
+}
+
+@Composable
+private fun UpdateActionButton(
+    label: String,
+    isFocused: Boolean,
+    onClick: () -> Unit,
+    highlighted: Boolean = false,
+    enabled: Boolean = true
+) {
+    val background = when {
+        !enabled -> Color.White.copy(alpha = 0.06f)
+        isFocused && highlighted -> SuccessGreen
+        isFocused -> Color.White.copy(alpha = 0.18f)
+        highlighted -> Pink.copy(alpha = 0.7f)
+        else -> Color.White.copy(alpha = 0.1f)
+    }
+
+    Box(
+        modifier = Modifier
+            .background(background, RoundedCornerShape(10.dp))
+            .border(
+                width = if (isFocused) 2.dp else 0.dp,
+                color = if (highlighted) SuccessGreen.copy(alpha = 0.5f) else Pink,
+                shape = RoundedCornerShape(10.dp)
+            )
+            .padding(horizontal = 18.dp, vertical = 12.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            style = ArflixTypography.button,
+            color = if (enabled) Color.White else TextSecondary.copy(alpha = 0.6f)
+        )
+    }
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -1979,13 +2243,20 @@ private fun AccountsSettings(
     traktCode: String?,
     traktUrl: String?,
     isTraktPolling: Boolean,
+    isSelfUpdateSupported: Boolean,
+    isCheckingForUpdate: Boolean,
+    isAppUpdateAvailable: Boolean,
+    availableAppUpdate: com.arflix.tv.updater.AppUpdate?,
+    downloadedApkPath: String?,
     focusedIndex: Int,
     onConnectCloud: () -> Unit,
     onDisconnectCloud: () -> Unit,
     onConnectTrakt: () -> Unit,
     onCancelTrakt: () -> Unit,
     onDisconnectTrakt: () -> Unit,
-    onSwitchProfile: () -> Unit
+    onSwitchProfile: () -> Unit,
+    onCheckUpdates: () -> Unit,
+    onInstallUpdate: () -> Unit
 ) {
     Column {
         Text(
@@ -2035,6 +2306,30 @@ private fun AccountsSettings(
             actionLabel = "SWITCH",
             isFocused = focusedIndex == 2,
             onClick = onSwitchProfile
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        SettingsActionRow(
+            title = "App Updates",
+            description = when {
+                !isSelfUpdateSupported -> "This install is managed by the Play Store"
+                downloadedApkPath != null -> "Latest update downloaded and ready to install"
+                isCheckingForUpdate -> "Checking GitHub Releases for a newer APK"
+                isAppUpdateAvailable -> "${availableAppUpdate?.title ?: "Update available"} ready to download"
+                else -> "Check GitHub Releases for the latest ARVIO APK"
+            },
+            actionLabel = when {
+                !isSelfUpdateSupported -> "PLAY"
+                downloadedApkPath != null -> "INSTALL"
+                isCheckingForUpdate -> "CHECKING"
+                isAppUpdateAvailable -> "UPDATE"
+                else -> "CHECK"
+            },
+            isFocused = focusedIndex == 3,
+            onClick = {
+                if (downloadedApkPath != null) onInstallUpdate() else onCheckUpdates()
+            }
         )
     }
 }

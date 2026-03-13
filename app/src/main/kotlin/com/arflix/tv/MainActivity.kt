@@ -64,8 +64,11 @@ import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.arflix.tv.data.repository.AuthRepository
 import com.arflix.tv.data.repository.AuthState
+import com.arflix.tv.data.repository.LauncherContinueWatchingRepository
+import com.arflix.tv.data.repository.LauncherContinueWatchingRequest
 import com.arflix.tv.data.repository.ProfileRepository
 import com.arflix.tv.data.repository.TraktRepository
+import com.arflix.tv.data.repository.toLauncherContinueWatchingRequest
 import com.arflix.tv.navigation.AppNavigation
 import com.arflix.tv.navigation.Screen
 import com.arflix.tv.ui.screens.login.LoginScreen
@@ -99,7 +102,11 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var traktRepository: Lazy<TraktRepository>
 
+    @Inject
+    lateinit var launcherContinueWatchingRepository: Lazy<LauncherContinueWatchingRepository>
+
     private var jankStats: JankStats? = null
+    private var pendingLauncherRequest by mutableStateOf<LauncherContinueWatchingRequest?>(null)
 
     // StartupViewModel for parallel loading during splash
     private val startupViewModel: StartupViewModel by viewModels()
@@ -111,6 +118,7 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
 
         super.onCreate(savedInstanceState)
+        pendingLauncherRequest = parseLauncherRequest(intent)
 
         // Keep screen on during playback
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -130,6 +138,9 @@ class MainActivity : ComponentActivity() {
                     authRepository = authRepository.get(),
                     profileRepository = profileRepository.get(),
                     traktRepository = traktRepository.get(),
+                    launcherContinueWatchingRepository = launcherContinueWatchingRepository.get(),
+                    pendingLauncherRequest = pendingLauncherRequest,
+                    onConsumeLauncherRequest = { pendingLauncherRequest = null },
                     preloadedCategories = startupState.categories,
                     preloadedHeroItem = startupState.heroItem,
                     preloadedHeroLogoUrl = startupState.heroLogoUrl,
@@ -157,6 +168,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        pendingLauncherRequest = parseLauncherRequest(intent)
+    }
+
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) {
@@ -172,6 +189,10 @@ class MainActivity : ComponentActivity() {
         jankStats = null
         super.onDestroy()
     }
+}
+
+private fun MainActivity.parseLauncherRequest(intent: android.content.Intent?): LauncherContinueWatchingRequest? {
+    return intent?.data?.toLauncherContinueWatchingRequest()
 }
 
 private fun ComponentActivity.runAfterFirstDraw(block: () -> Unit) {
@@ -286,6 +307,9 @@ fun ArflixApp(
     authRepository: AuthRepository,
     profileRepository: ProfileRepository,
     traktRepository: TraktRepository,
+    launcherContinueWatchingRepository: LauncherContinueWatchingRepository,
+    pendingLauncherRequest: LauncherContinueWatchingRequest? = null,
+    onConsumeLauncherRequest: () -> Unit = {},
     preloadedCategories: List<com.arflix.tv.data.model.Category> = emptyList(),
     preloadedHeroItem: com.arflix.tv.data.model.MediaItem? = null,
     preloadedHeroLogoUrl: String? = null,
@@ -302,6 +326,11 @@ fun ArflixApp(
     LaunchedEffect(authState, activeProfile?.id) {
         if (authState is AuthState.NotAuthenticated) {
             lastAddonsSyncKey = null
+        }
+        if (activeProfile != null) {
+            launcherContinueWatchingRepository.refreshForCurrentProfile()
+        } else {
+            launcherContinueWatchingRepository.clearPublishedPrograms()
         }
     }
 
@@ -337,6 +366,23 @@ fun ArflixApp(
             },
             onExitApp = onExitApp
         )
+    }
+
+    LaunchedEffect(activeProfile?.id, pendingLauncherRequest) {
+        val request = pendingLauncherRequest ?: return@LaunchedEffect
+        if (activeProfile == null) return@LaunchedEffect
+
+        val route = Screen.Details.createRoute(
+            mediaType = request.mediaType,
+            mediaId = request.mediaId,
+            initialSeason = request.season,
+            initialEpisode = request.episode
+        )
+        navController.navigate(route) {
+            popUpTo(Screen.ProfileSelection.route) { inclusive = true }
+            launchSingleTop = true
+        }
+        onConsumeLauncherRequest()
     }
 }
 

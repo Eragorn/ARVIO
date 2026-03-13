@@ -46,13 +46,15 @@ import androidx.tv.foundation.lazy.grid.rememberTvLazyGridState
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.arflix.tv.data.model.MediaType
+import com.arflix.tv.ui.components.AppTopBar
+import com.arflix.tv.ui.components.AppTopBarContentTopInset
 import com.arflix.tv.ui.components.LoadingIndicator
 import com.arflix.tv.ui.components.MediaCard
-import com.arflix.tv.ui.components.Sidebar
 import com.arflix.tv.ui.components.SidebarItem
 import com.arflix.tv.ui.components.Toast
 import com.arflix.tv.ui.components.ToastType as ComponentToastType
-import com.arflix.tv.ui.components.TopBarClock
+import com.arflix.tv.ui.components.topBarFocusedItem
+import com.arflix.tv.ui.components.topBarMaxIndex
 import com.arflix.tv.ui.theme.ArflixTypography
 import com.arflix.tv.ui.theme.BackgroundDark
 import com.arflix.tv.ui.theme.Pink
@@ -94,7 +96,7 @@ fun WatchlistScreen(
     
     var isSidebarFocused by remember { mutableStateOf(false) }
     val hasProfile = currentProfile != null
-    val maxSidebarIndex = if (hasProfile) SidebarItem.entries.size else SidebarItem.entries.size - 1
+    val maxSidebarIndex = topBarMaxIndex(hasProfile)
     var sidebarFocusIndex by remember { mutableIntStateOf(if (hasProfile) 3 else 2) } // WATCHLIST
     val rootFocusRequester = remember { FocusRequester() }
     val gridFocusRequester = remember { FocusRequester() }
@@ -157,13 +159,30 @@ fun WatchlistScreen(
                         }
                         Key.DirectionLeft -> {
                             if (!isSidebarFocused) {
-                                isSidebarFocused = true
+                                true
+                            } else {
+                                if (sidebarFocusIndex > 0) {
+                                    sidebarFocusIndex = (sidebarFocusIndex - 1).coerceIn(0, maxSidebarIndex)
+                                }
+                                true
+                            }
+                        }
+                        Key.DirectionRight -> {
+                            if (isSidebarFocused) {
+                                if (sidebarFocusIndex < maxSidebarIndex) {
+                                    sidebarFocusIndex = (sidebarFocusIndex + 1).coerceIn(0, maxSidebarIndex)
+                                }
                                 true
                             } else {
                                 false
                             }
                         }
-                        Key.DirectionRight -> {
+                        Key.DirectionUp -> {
+                            if (isSidebarFocused) {
+                                true
+                            } else false
+                        }
+                        Key.DirectionDown -> {
                             if (isSidebarFocused) {
                                 if (uiState.items.isNotEmpty()) {
                                     isSidebarFocused = false
@@ -173,20 +192,6 @@ fun WatchlistScreen(
                                     }
                                 }
                                 true
-                            } else {
-                                false
-                            }
-                        }
-                        Key.DirectionUp -> {
-                            if (isSidebarFocused && sidebarFocusIndex > 0) {
-                                sidebarFocusIndex = (sidebarFocusIndex - 1).coerceIn(0, maxSidebarIndex)
-                                true
-                            } else false
-                        }
-                        Key.DirectionDown -> {
-                            if (isSidebarFocused && sidebarFocusIndex < maxSidebarIndex) {
-                                sidebarFocusIndex = (sidebarFocusIndex + 1).coerceIn(0, maxSidebarIndex)
-                                true
                             } else false
                         }
                         Key.Enter, Key.DirectionCenter -> {
@@ -194,13 +199,13 @@ fun WatchlistScreen(
                                 if (hasProfile && sidebarFocusIndex == 0) {
                                     onSwitchProfile()
                                 } else {
-                                    val itemIndex = if (hasProfile) sidebarFocusIndex - 1 else sidebarFocusIndex
-                                    when (SidebarItem.entries[itemIndex]) {
+                                    when (topBarFocusedItem(sidebarFocusIndex, hasProfile)) {
                                         SidebarItem.SEARCH -> onNavigateToSearch()
                                         SidebarItem.HOME -> onNavigateToHome()
                                         SidebarItem.WATCHLIST -> { }
                                         SidebarItem.TV -> onNavigateToTv()
                                         SidebarItem.SETTINGS -> onNavigateToSettings()
+                                        null -> Unit
                                     }
                                 }
                                 true
@@ -211,32 +216,19 @@ fun WatchlistScreen(
                 } else false
             }
     ) {
-        Row(modifier = Modifier.fillMaxSize()) {
-            // Sidebar
-            Sidebar(
-                selectedItem = SidebarItem.WATCHLIST,
-                isSidebarFocused = isSidebarFocused,
-                focusedIndex = sidebarFocusIndex,
-                profile = currentProfile,
-                onProfileClick = onSwitchProfile,
-                onItemSelected = { item ->
-                    when (item) {
-                        SidebarItem.SEARCH -> onNavigateToSearch()
-                        SidebarItem.HOME -> onNavigateToHome()
-                        SidebarItem.WATCHLIST -> { }
-                        SidebarItem.TV -> onNavigateToTv()
-                        SidebarItem.SETTINGS -> onNavigateToSettings()
-                    }
-                }
-            )
-            
-            // Content
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxSize()
-                    .padding(start = 24.dp, top = 32.dp, end = 48.dp)
-            ) {
+        AppTopBar(
+            selectedItem = SidebarItem.WATCHLIST,
+            isFocused = isSidebarFocused,
+            focusedIndex = sidebarFocusIndex,
+            profile = currentProfile
+        )
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = AppTopBarContentTopInset)
+                .padding(start = 24.dp, top = 24.dp, end = 48.dp)
+        ) {
                 // Header with pink bookmark icon
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -324,10 +316,6 @@ fun WatchlistScreen(
                     }
                 }
             }
-        }
-        
-        // Clock in top right
-        TopBarClock(modifier = Modifier.align(Alignment.TopEnd))
 
         // Toast notification
         uiState.toastMessage?.let { message ->

@@ -16,6 +16,8 @@ import com.arflix.tv.data.repository.ProfileManager
 import com.arflix.tv.data.repository.SkipInterval
 import com.arflix.tv.data.repository.SkipIntroRepository
 import com.arflix.tv.data.repository.StreamRepository
+import com.arflix.tv.data.repository.CloudSyncRepository
+import com.arflix.tv.data.repository.LauncherContinueWatchingRepository
 import com.arflix.tv.data.repository.TraktRepository
 import com.arflix.tv.data.repository.WatchHistoryEntry
 import com.arflix.tv.data.repository.WatchHistoryRepository
@@ -69,6 +71,8 @@ class PlayerViewModel @Inject constructor(
     private val streamRepository: StreamRepository,
     private val traktRepository: TraktRepository,
     private val watchHistoryRepository: WatchHistoryRepository,
+    private val cloudSyncRepository: CloudSyncRepository,
+    private val launcherContinueWatchingRepository: LauncherContinueWatchingRepository,
     private val tmdbApi: TmdbApi,
     private val skipIntroRepository: SkipIntroRepository,
     private val playbackTelemetryRepository: PlaybackTelemetryRepository
@@ -1509,6 +1513,11 @@ class PlayerViewModel @Inject constructor(
                     streamAddonId = streamAddonId,
                     streamTitle = streamTitle
                 )
+
+                if (!isPlaying || playbackState == Player.STATE_ENDED || progressPercent >= Constants.WATCHED_THRESHOLD) {
+                    runCatching { cloudSyncRepository.pushToCloud() }
+                    runCatching { launcherContinueWatchingRepository.refreshForCurrentProfile() }
+                }
             }
 
             // Mark as watched when playback ends or crosses threshold
@@ -1560,6 +1569,9 @@ class PlayerViewModel @Inject constructor(
                         // Best-effort: don't let CW save failure affect playback
                     }
                 }
+
+                runCatching { cloudSyncRepository.pushToCloud() }
+                runCatching { launcherContinueWatchingRepository.refreshForCurrentProfile() }
             }
 
             lastIsPlaying = isPlaying

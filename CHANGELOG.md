@@ -7,6 +7,29 @@ All notable changes to this project are documented in this file.
 ### Added
 - (Nothing yet)
 
+## [1.9] - 2026-03-13
+
+### Added
+- GitHub Releases in-app updater for non-Play installs, including download, installer handoff, and unknown-sources guidance.
+- Android TV / launcher Continue Watching publishing support for launcher channels and Watch Next style surfaces.
+- Cloud backup/restore coverage for non-Trakt local watched state and local Continue Watching across profiles.
+
+### Changed
+- App version updated to `1.9` (`versionCode 190`) and Settings version label now reads from `BuildConfig`.
+- Home / Details navigation, focus ownership, and topbar entry were reworked so topbar is entered via `Up` instead of left-edge drift.
+- Home and Details metadata/description layout was refined for more stable hero placement and clearer text hierarchy.
+- Live TV layout was tightened under the topbar, with denser guide rows, a smaller preview block, and more compact category typography.
+- IPTV group/category ordering now preserves playlist-provided order instead of forcing alphabetical sorting.
+
+### Fixed
+- Home open-item crash paths caused by placeholder Continue Watching entries and invalid hero/logo fetches.
+- Continue Watching now refreshes more reliably across Trakt and non-Trakt profiles, including remove/dismiss persistence and next-episode advancement.
+- Details now keeps the correct Continue Watching target and watched markers when opening into a resumed episode/season path.
+- Home context menu focus, overlay layering, and back handling regressions.
+- ARVIO Cloud TV pairing fallback/verification flow and missing release-build Supabase host configuration.
+- Live TV guide viewport/focus polish, including more visible channels and cleaner spacing.
+- Startup crash caused by restricted TV provider channel selection query in launcher integration.
+
 ## [1.8.4] - 2026-03-04
 
 ### Added

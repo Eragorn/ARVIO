@@ -45,6 +45,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.tv.material3.ExperimentalTvMaterial3Api
@@ -123,7 +124,8 @@ fun MediaContextMenu(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.7f))
+                .zIndex(50f)
+                .background(Color.Black.copy(alpha = 0.5f))
                 .focusRequester(focusRequester)
                 .focusable()
                 .onPreviewKeyEvent { event ->
@@ -150,14 +152,15 @@ fun MediaContextMenu(
                         }
                     } else false
                 },
-            contentAlignment = Alignment.Center
+            contentAlignment = Alignment.TopCenter
         ) {
             Column(
                 modifier = Modifier
-                    .width(350.dp)
-                    .background(BackgroundCard, RoundedCornerShape(16.dp))
-                    .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(16.dp))
-                    .padding(20.dp),
+                    .padding(top = 110.dp)
+                    .width(320.dp)
+                    .background(BackgroundCard, RoundedCornerShape(14.dp))
+                    .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(14.dp))
+                    .padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Title
@@ -168,7 +171,7 @@ fun MediaContextMenu(
                     maxLines = 2
                 )
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 // Menu items
                 Column(
@@ -188,7 +191,7 @@ fun MediaContextMenu(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 // Hint
                 Text(
@@ -230,13 +233,13 @@ private fun ContextMenuItem(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = if (isFocused) Color.White else TextSecondary,
+                tint = if (isFocused) Color.Black else TextSecondary,
                 modifier = Modifier.size(22.dp)
             )
             Text(
                 text = label,
                 style = ArflixTypography.body,
-                color = if (isFocused) Color.White else TextPrimary
+                color = if (isFocused) Color.Black else TextPrimary
             )
         }
     }

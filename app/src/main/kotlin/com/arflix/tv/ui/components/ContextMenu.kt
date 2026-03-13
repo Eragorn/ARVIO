@@ -78,6 +78,7 @@ object ContextActions {
     val addWatchlist = ContextAction("add_watchlist", "Add to Watchlist", Icons.Default.BookmarkBorder, Pink)
     val removeWatchlist = ContextAction("remove_watchlist", "Remove from Watchlist", Icons.Default.Bookmark, TextSecondary)
     val viewDetails = ContextAction("view_details", "View Details", Icons.Default.Info, TextPrimary)
+    val markSeasonWatched = ContextAction("mark_season_watched", "Mark Season Watched", Icons.Default.Check, Color(0xFF22C55E))
 }
 
 /**
@@ -112,7 +113,7 @@ fun ContextMenu(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.85f))
+                .background(Color.Black.copy(alpha = 0.56f))
                 .focusRequester(focusRequester)
                 .focusable()
                 .onPreviewKeyEvent { event ->
@@ -140,13 +141,14 @@ fun ContextMenu(
                         }
                     } else false
                 },
-            contentAlignment = Alignment.Center
+            contentAlignment = Alignment.TopCenter
         ) {
             Column(
                 modifier = Modifier
-                    .width(480.dp)
-                    .background(BackgroundElevated, RoundedCornerShape(24.dp))
-                    .padding(32.dp),
+                    .padding(top = 110.dp)
+                    .width(360.dp)
+                    .background(BackgroundElevated, RoundedCornerShape(18.dp))
+                    .padding(20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Title
@@ -166,7 +168,7 @@ fun ContextMenu(
                     )
                 }
                 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(16.dp))
                 
                 // Divider
                 Box(
@@ -176,7 +178,7 @@ fun ContextMenu(
                         .background(Color.White.copy(alpha = 0.1f))
                 )
                 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 
                 // Actions
                 Column(
@@ -190,14 +192,14 @@ fun ContextMenu(
                     }
                 }
                 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(14.dp))
                 
                 // Close hint
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
@@ -235,7 +237,7 @@ private fun ContextMenuItem(
                 color = borderColor,
                 shape = RoundedCornerShape(12.dp)
             )
-            .padding(16.dp),
+            .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
@@ -303,6 +305,28 @@ fun EpisodeContextMenu(
                 "play" -> onPlay()
                 "sources" -> onSelectSource()
                 "mark_watched", "mark_unwatched" -> onToggleWatched()
+            }
+            onDismiss()
+        },
+        onDismiss = onDismiss
+    )
+}
+
+@Composable
+fun SeasonContextMenu(
+    isVisible: Boolean,
+    seasonNumber: Int,
+    onMarkSeasonWatched: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    ContextMenu(
+        isVisible = isVisible,
+        title = "Season $seasonNumber",
+        subtitle = "Quick Actions",
+        actions = listOf(ContextActions.markSeasonWatched),
+        onAction = { action ->
+            if (action.id == "mark_season_watched") {
+                onMarkSeasonWatched()
             }
             onDismiss()
         },

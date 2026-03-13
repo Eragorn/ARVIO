@@ -61,10 +61,12 @@ class TvDeviceAuthRepository @Inject constructor(
                         throw IllegalStateException(parseError(body, "Failed to start TV auth"))
                     }
                     val json = JSONObject(body)
+                    val userCode = json.getString("user_code")
                     val verificationUrl = json.optString("verification_url")
                         .ifBlank { json.optString("verification_uri") }
+                        .ifBlank { "https://auth.arvio.tv/?code=${java.net.URLEncoder.encode(userCode, "UTF-8")}" }
                     TvDeviceAuthSession(
-                        userCode = json.getString("user_code"),
+                        userCode = userCode,
                         deviceCode = json.getString("device_code"),
                         verificationUrl = verificationUrl,
                         expiresInSeconds = json.optInt("expires_in", 600),

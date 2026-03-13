@@ -101,18 +101,21 @@ import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.data.model.Review
 import com.arflix.tv.ui.components.EpisodeContextMenu
+import com.arflix.tv.ui.components.SeasonContextMenu
 import com.arflix.tv.ui.components.LoadingIndicator
+import com.arflix.tv.ui.components.AppTopBar
+import com.arflix.tv.ui.components.AppTopBarContentTopInset
 import com.arflix.tv.ui.components.CardLayoutMode
 import com.arflix.tv.ui.components.MediaCard
 import com.arflix.tv.ui.components.PersonModal
 import com.arflix.tv.ui.components.PosterCard
 import com.arflix.tv.ui.components.rememberCardLayoutMode
-import com.arflix.tv.ui.components.Sidebar
 import com.arflix.tv.ui.components.SidebarItem
 import com.arflix.tv.ui.components.SkeletonDetailsPage
 import com.arflix.tv.ui.components.StreamSelector
 import com.arflix.tv.ui.components.Toast
-import com.arflix.tv.ui.components.TopBarClock
+import com.arflix.tv.ui.components.topBarFocusedItem
+import com.arflix.tv.ui.components.topBarMaxIndex
 import com.arflix.tv.ui.skin.ArvioFocusableSurface
 import com.arflix.tv.ui.skin.ArvioSkin
 import com.arflix.tv.ui.skin.rememberArvioCardShape
@@ -126,6 +129,9 @@ import com.arflix.tv.ui.theme.TextPrimary
 import com.arflix.tv.ui.theme.TextSecondary
 import com.arflix.tv.util.isInCinema
 import com.arflix.tv.util.parseRatingValue
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlin.math.abs
 
 /**
@@ -168,7 +174,7 @@ fun DetailsScreen(
     // Sidebar state
     var isSidebarFocused by remember { mutableStateOf(false) }
     val hasProfile = currentProfile != null
-    val maxSidebarIndex = if (hasProfile) SidebarItem.entries.size else SidebarItem.entries.size - 1
+    val maxSidebarIndex = topBarMaxIndex(hasProfile)
     var sidebarFocusIndex by remember { mutableIntStateOf(if (hasProfile) 2 else 1) }
     
     // Stream Selector state
@@ -178,6 +184,10 @@ fun DetailsScreen(
     // Episode Context Menu state
     var showEpisodeContextMenu by remember { mutableStateOf(false) }
     var contextMenuEpisode by remember { mutableStateOf<Episode?>(null) }
+    var showSeasonContextMenu by remember { mutableStateOf(false) }
+    var contextMenuSeason by remember { mutableIntStateOf(1) }
+    var seasonSelectDownAtMs by remember { mutableLongStateOf(0L) }
+    var ignoreFirstResumeRefresh by remember(mediaType, mediaId, initialSeason, initialEpisode) { mutableStateOf(true) }
 
     val focusRequester = remember { FocusRequester() }
 
@@ -189,7 +199,11 @@ fun DetailsScreen(
     DisposableEffect(lifecycleOwner, mediaType, mediaId) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                viewModel.refreshAfterPlayerReturn()
+                if (ignoreFirstResumeRefresh) {
+                    ignoreFirstResumeRefresh = false
+                } else {
+                    viewModel.refreshAfterPlayerReturn()
+                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -261,18 +275,21 @@ fun DetailsScreen(
             .onPreviewKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown) {
                     // Check if any modal is showing
-                    if (showStreamSelector || showEpisodeContextMenu || uiState.showPersonModal) {
+                    if (showStreamSelector || showEpisodeContextMenu || showSeasonContextMenu || uiState.showPersonModal) {
                         return@onPreviewKeyEvent false // Let the modal handle it
                     }
                     
                     when (event.key) {
                         Key.Back, Key.Escape -> {
-                            onBack()  // Go directly home on back press
+                            onBack()
                             true
                         }
                         Key.DirectionLeft -> {
                             if (isSidebarFocused) {
-                                false
+                                if (sidebarFocusIndex > 0) {
+                                    sidebarFocusIndex = (sidebarFocusIndex - 1).coerceIn(0, maxSidebarIndex)
+                                }
+                                true
                             } else {
                                 // Check if at leftmost item in any section - go to sidebar
                                 val atLeftmost = when (focusedSection) {
@@ -284,7 +301,6 @@ fun DetailsScreen(
                                     FocusSection.SIMILAR -> similarIndex == 0
                                 }
                                 if (atLeftmost) {
-                                    isSidebarFocused = true
                                     true
                                 } else {
                                     handleLeft(
@@ -297,7 +313,9 @@ fun DetailsScreen(
                         }
                         Key.DirectionRight -> {
                             if (isSidebarFocused) {
-                                isSidebarFocused = false
+                                if (sidebarFocusIndex < maxSidebarIndex) {
+                                    sidebarFocusIndex = (sidebarFocusIndex + 1).coerceIn(0, maxSidebarIndex)
+                                }
                                 true
                             } else {
                                 handleRight(
@@ -308,8 +326,7 @@ fun DetailsScreen(
                             }
                         }
                         Key.DirectionUp -> {
-                            if (isSidebarFocused && sidebarFocusIndex > 0) {
-                                sidebarFocusIndex = (sidebarFocusIndex - 1).coerceIn(0, maxSidebarIndex)
+                            if (isSidebarFocused) {
                                 true
                             } else {
                                 // Navigation: BUTTONS -> SEASONS -> EPISODES -> CAST -> REVIEWS -> SIMILAR
@@ -318,7 +335,10 @@ fun DetailsScreen(
                                 val hasCast = uiState.cast.isNotEmpty()
                                 val hasReviews = uiState.reviews.isNotEmpty()
                                 focusedSection = when (focusedSection) {
-                                    FocusSection.BUTTONS -> FocusSection.BUTTONS  // Stay on buttons (top)
+                                    FocusSection.BUTTONS -> {
+                                        isSidebarFocused = true
+                                        FocusSection.BUTTONS
+                                    }
                                     FocusSection.SEASONS -> FocusSection.BUTTONS
                                     FocusSection.EPISODES -> {
                                         if (uiState.totalSeasons > 1) FocusSection.SEASONS else FocusSection.BUTTONS
@@ -339,8 +359,8 @@ fun DetailsScreen(
                             }
                         }
                         Key.DirectionDown -> {
-                            if (isSidebarFocused && sidebarFocusIndex < maxSidebarIndex) {
-                                sidebarFocusIndex = (sidebarFocusIndex + 1).coerceIn(0, maxSidebarIndex)
+                            if (isSidebarFocused) {
+                                isSidebarFocused = false
                                 true
                             } else {
                                 // Navigation: BUTTONS -> SEASONS -> EPISODES -> CAST -> REVIEWS -> SIMILAR
@@ -389,17 +409,23 @@ fun DetailsScreen(
                             if (SystemClock.elapsedRealtime() < suppressSelectUntilMs) {
                                 return@onPreviewKeyEvent true
                             }
+                            if (!isSidebarFocused && focusedSection == FocusSection.SEASONS) {
+                                if (seasonSelectDownAtMs == 0L) {
+                                    seasonSelectDownAtMs = SystemClock.elapsedRealtime()
+                                }
+                                return@onPreviewKeyEvent true
+                            }
                             if (isSidebarFocused) {
                                 if (hasProfile && sidebarFocusIndex == 0) {
                                     onSwitchProfile()
                                 } else {
-                                    val itemIndex = if (hasProfile) sidebarFocusIndex - 1 else sidebarFocusIndex
-                                    when (SidebarItem.entries[itemIndex]) {
+                                    when (topBarFocusedItem(sidebarFocusIndex, hasProfile)) {
                                         SidebarItem.SEARCH -> onNavigateToSearch()
                                         SidebarItem.HOME -> onNavigateToHome()
                                         SidebarItem.WATCHLIST -> onNavigateToWatchlist()
                                         SidebarItem.TV -> onNavigateToTv()
                                         SidebarItem.SETTINGS -> onNavigateToSettings()
+                                        null -> Unit
                                     }
                                 }
                                 return@onPreviewKeyEvent true
@@ -515,6 +541,21 @@ fun DetailsScreen(
                         }
                         else -> false
                     }
+                } else if (event.type == KeyEventType.KeyUp && (event.key == Key.Enter || event.key == Key.DirectionCenter)) {
+                    if (!isSidebarFocused && focusedSection == FocusSection.SEASONS && seasonSelectDownAtMs > 0L) {
+                        val heldMs = SystemClock.elapsedRealtime() - seasonSelectDownAtMs
+                        seasonSelectDownAtMs = 0L
+                        if (heldMs >= 900L) {
+                            contextMenuSeason = seasonIndex + 1
+                            showSeasonContextMenu = true
+                        } else {
+                            viewModel.loadSeason(seasonIndex + 1)
+                        }
+                        true
+                    } else {
+                        seasonSelectDownAtMs = 0L
+                        false
+                    }
                 } else false
             }
     ) {
@@ -549,31 +590,18 @@ fun DetailsScreen(
                     budget = uiState.budget,
                     seasonProgress = uiState.seasonProgress,
                     playLabel = uiState.playLabel,
+                    contentHasFocus = !isSidebarFocused,
                     usePosterCards = usePosterCards
                 )
             }
         }
 
-        // Sidebar overlays on top (same as HomeScreen)
-        Sidebar(
+        AppTopBar(
             selectedItem = SidebarItem.HOME,
-            isSidebarFocused = isSidebarFocused,
+            isFocused = isSidebarFocused,
             focusedIndex = sidebarFocusIndex,
-            profile = currentProfile,
-            onProfileClick = onSwitchProfile,
-            onItemSelected = { item ->
-                when (item) {
-                    SidebarItem.SEARCH -> onNavigateToSearch()
-                    SidebarItem.HOME -> onNavigateToHome()
-                    SidebarItem.WATCHLIST -> onNavigateToWatchlist()
-                    SidebarItem.TV -> onNavigateToTv()
-                    SidebarItem.SETTINGS -> onNavigateToSettings()
-                }
-            }
+            profile = currentProfile
         )
-        
-        // Clock (profile moved to sidebar)
-        TopBarClock(modifier = Modifier.align(Alignment.TopEnd))
         
         // Person Modal
         PersonModal(
@@ -642,6 +670,17 @@ fun DetailsScreen(
                 }
             )
         }
+
+        SeasonContextMenu(
+            isVisible = showSeasonContextMenu,
+            seasonNumber = contextMenuSeason,
+            onMarkSeasonWatched = {
+                viewModel.markSeasonWatched(contextMenuSeason)
+            },
+            onDismiss = {
+                showSeasonContextMenu = false
+            }
+        )
 
         // Toast notifications
         uiState.toastMessage?.let { message ->
@@ -753,8 +792,10 @@ private fun DetailsContent(
     budget: String? = null,
     seasonProgress: Map<Int, Pair<Int, Int>> = emptyMap(),
     playLabel: String? = null,
+    contentHasFocus: Boolean = true,
     usePosterCards: Boolean = false
 ) {
+    val focusSectionForUi = if (contentHasFocus) focusedSection else null
     // === PREMIUM LAYERED TEXT SHADOWS ===
     val textShadow = Shadow(
         color = Color.Black.copy(alpha = 0.9f),
@@ -830,14 +871,14 @@ private fun DetailsContent(
         // Layer 4 removed for performance - radial gradients are expensive on TV
 
         // Hero metadata positioned above the content rows
-        val heroStartPadding = 68.dp  // 56dp sidebar + 12dp gap
+        val heroStartPadding = 36.dp
         val heroEndPadding = 400.dp
         val configuration = LocalConfiguration.current
         val contentRowHeight = (configuration.screenHeightDp * 0.34f).dp.coerceIn(240.dp, 320.dp)
         val contentRowBottomPadding = 12.dp
         val contentRowTopPadding = contentRowHeight + contentRowBottomPadding
         val buttonsBottomPadding = contentRowTopPadding - 10.dp
-        val heroBottomPadding = buttonsBottomPadding + if (configuration.screenHeightDp < 720) 54.dp else 62.dp
+        val heroBottomPadding = buttonsBottomPadding + if (configuration.screenHeightDp < 720) 56.dp else 64.dp
 
         Box(
             modifier = Modifier
@@ -915,10 +956,7 @@ private fun DetailsContent(
                 val rating = item.imdbRating.ifEmpty { item.tmdbRating }
                 val ratingValue = parseRatingValue(rating)
                 val budgetText = budget?.trim()?.takeIf { it.isNotEmpty() && item.mediaType == MediaType.MOVIE }
-                val maxOverviewLines = run {
-                    val base = if (isCompactHeight) 4 else 6
-                    base.coerceAtLeast(3)
-                }
+                val overviewMaxHeight = if (isCompactHeight) 62.dp else 66.dp
 
                 val separatorStyle = ArflixTypography.caption.copy(
                     fontSize = 14.sp,
@@ -1005,19 +1043,24 @@ private fun DetailsContent(
 
                 val displayOverview = item.overview
 
-                Text(
-                    text = displayOverview,
-                    style = ArflixTypography.body.copy(
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        lineHeight = 20.sp,
-                        shadow = textShadow
-                    ),
-                    color = Color.White,
-                    maxLines = maxOverviewLines,
-                    overflow = TextOverflow.Clip,
-                    modifier = Modifier.width(560.dp)
-                )
+                Box(
+                    modifier = Modifier
+                        .width(560.dp)
+                        .height(overviewMaxHeight)
+                ) {
+                    Text(
+                        text = displayOverview,
+                        style = ArflixTypography.body.copy(
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            lineHeight = 20.sp,
+                            shadow = textShadow
+                        ),
+                        color = Color.White,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
 
             }
         }
@@ -1050,31 +1093,31 @@ private fun DetailsContent(
                     icon = Icons.Default.PlayArrow,
                     text = playButtonLabel,
                     isPrimary = true,
-                    isFocused = focusedSection == FocusSection.BUTTONS && buttonIndex == 0
+                    isFocused = focusSectionForUi == FocusSection.BUTTONS && buttonIndex == 0
                 )
                 PremiumActionButton(
                     icon = Icons.Default.List,
                     text = "Sources",
-                    isFocused = focusedSection == FocusSection.BUTTONS && buttonIndex == 1,
+                    isFocused = focusSectionForUi == FocusSection.BUTTONS && buttonIndex == 1,
                     isIconOnly = true
                 )
                 PremiumActionButton(
                     icon = Icons.Default.Movie,
                     text = "Trailer",
-                    isFocused = focusedSection == FocusSection.BUTTONS && buttonIndex == 2,
+                    isFocused = focusSectionForUi == FocusSection.BUTTONS && buttonIndex == 2,
                     isIconOnly = true
                 )
                 PremiumActionButton(
                     icon = if (buttonWatched) Icons.Default.Check else Icons.Default.Visibility,
                     text = if (buttonWatched) "Watched" else "Mark Watched",
-                    isFocused = focusedSection == FocusSection.BUTTONS && buttonIndex == 3,
+                    isFocused = focusSectionForUi == FocusSection.BUTTONS && buttonIndex == 3,
                     isActive = buttonWatched,
                     isIconOnly = true
                 )
                 PremiumActionButton(
                     icon = if (isInWatchlist) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
                     text = "Watchlist",
-                    isFocused = focusedSection == FocusSection.BUTTONS && buttonIndex == 4,
+                    isFocused = focusSectionForUi == FocusSection.BUTTONS && buttonIndex == 4,
                     isIconOnly = true,
                     isActive = isInWatchlist
                 )
@@ -1108,7 +1151,9 @@ private fun DetailsContent(
         val similarIdx = if (hasSimilar) idx.also { idx++ } else -1
         // Smart vertical section scroll:
         // keep top cluster (buttons/episodes/seasons) stable and only scroll when moving to lower sections.
-        LaunchedEffect(focusedSection) {
+        LaunchedEffect(focusedSection, contentHasFocus) {
+            if (!contentHasFocus) return@LaunchedEffect
+
             val targetIndex = when (focusedSection) {
                 FocusSection.BUTTONS, FocusSection.EPISODES, FocusSection.SEASONS -> 0
                 FocusSection.CAST -> castIdx
@@ -1122,9 +1167,9 @@ private fun DetailsContent(
             val topClusterMaxIndex = maxOf(episodesIdx, seasonsIdx, 0)
 
             // Avoid jitter while moving inside the top area.
-            if (focusedSection == FocusSection.BUTTONS ||
-                focusedSection == FocusSection.EPISODES ||
-                focusedSection == FocusSection.SEASONS
+            if (focusSectionForUi == FocusSection.BUTTONS ||
+                focusSectionForUi == FocusSection.EPISODES ||
+                focusSectionForUi == FocusSection.SEASONS
             ) {
                 if (firstVisible > topClusterMaxIndex) {
                     contentScrollState.animateScrollToItem(0)
@@ -1146,7 +1191,7 @@ private fun DetailsContent(
                 .align(Alignment.BottomStart)
                 .fillMaxWidth()
                 .height(contentRowHeight)
-                .padding(start = 56.dp, bottom = contentRowBottomPadding)
+                .padding(start = 24.dp, bottom = contentRowBottomPadding)
                 .clipToBounds(),  // Clip content to prevent overlay on hero
             verticalArrangement = Arrangement.spacedBy(8.dp),
             contentPadding = PaddingValues(top = 12.dp)
@@ -1160,16 +1205,16 @@ private fun DetailsContent(
                         val seasonItems = remember(totalSeasons) { (1..totalSeasons).toList() }
                         HomeStyleRowAutoScroll(
                             rowState = seasonRowState,
-                            isCurrentRow = focusedSection == FocusSection.SEASONS,
+                            isCurrentRow = focusSectionForUi == FocusSection.SEASONS,
                             focusedItemIndex = seasonIndex,
                             totalItems = totalSeasons,
                             itemWidth = 128.dp,
                             itemSpacing = 8.dp
                         )
 
-                        val seasonFocusIndex by remember(focusedSection, seasonIndex) {
+                        val seasonFocusIndex by remember(focusSectionForUi, seasonIndex) {
                             derivedStateOf {
-                                if (focusedSection == FocusSection.SEASONS) seasonIndex else -1
+                                if (focusSectionForUi == FocusSection.SEASONS) seasonIndex else -1
                             }
                         }
 
@@ -1180,12 +1225,15 @@ private fun DetailsContent(
                         ) {
                             itemsIndexed(seasonItems, key = { _, s -> s }) { index, season ->
                                 val progress = seasonProgress[season]
+                                val currentSeasonProgress = if (season == currentSeason && episodes.isNotEmpty()) {
+                                    Pair(episodes.count { it.isWatched }, episodes.size)
+                                } else null
                                 SeasonButton(
                                     season = season,
                                     isSelected = season == currentSeason,
-                                    isFocused = focusedSection == FocusSection.SEASONS && index == seasonFocusIndex,
-                                    watchedCount = progress?.first ?: 0,
-                                    totalCount = progress?.second ?: 0
+                                    isFocused = focusSectionForUi == FocusSection.SEASONS && index == seasonFocusIndex,
+                                    watchedCount = currentSeasonProgress?.first ?: progress?.first ?: 0,
+                                    totalCount = currentSeasonProgress?.second ?: progress?.second ?: 0
                                 )
                             }
                         }
@@ -1197,14 +1245,14 @@ private fun DetailsContent(
                     val episodeRowState = rememberTvLazyListState()
                     HomeStyleRowAutoScroll(
                         rowState = episodeRowState,
-                        isCurrentRow = focusedSection == FocusSection.EPISODES,
+                        isCurrentRow = focusSectionForUi == FocusSection.EPISODES,
                         focusedItemIndex = episodeIndex,
                         totalItems = episodes.size,
                         itemWidth = episodeCardWidth,
                         itemSpacing = 16.dp
                     )
 
-                    val currentFocusedSection by rememberUpdatedState(focusedSection)
+                    val currentFocusedSection by rememberUpdatedState(focusSectionForUi)
                     val currentEpisodeIndex by rememberUpdatedState(episodeIndex)
 
                     TvLazyRow(
@@ -1235,7 +1283,7 @@ private fun DetailsContent(
                     val castRowState = rememberTvLazyListState()
                     HomeStyleRowAutoScroll(
                         rowState = castRowState,
-                        isCurrentRow = focusedSection == FocusSection.CAST,
+                        isCurrentRow = focusSectionForUi == FocusSection.CAST,
                         focusedItemIndex = castIndex,
                         totalItems = cast.size,
                         itemWidth = 90.dp,
@@ -1264,7 +1312,7 @@ private fun DetailsContent(
                             ) { index, castMember ->
                                 CircularCastCard(
                                     castMember = castMember,
-                                    isFocused = focusedSection == FocusSection.CAST && index == castIndex,
+                                    isFocused = focusSectionForUi == FocusSection.CAST && index == castIndex,
                                     onClick = { /* Handled by key navigation */ }
                                 )
                             }
@@ -1282,7 +1330,7 @@ private fun DetailsContent(
                     val reviewRowState = rememberTvLazyListState()
                     HomeStyleRowAutoScroll(
                         rowState = reviewRowState,
-                        isCurrentRow = focusedSection == FocusSection.REVIEWS,
+                        isCurrentRow = focusSectionForUi == FocusSection.REVIEWS,
                         focusedItemIndex = reviewIndex,
                         totalItems = reviews.size,
                         itemWidth = 320.dp,
@@ -1311,7 +1359,7 @@ private fun DetailsContent(
                             ) { index, review ->
                                 ReviewCard(
                                     review = review,
-                                    isFocused = focusedSection == FocusSection.REVIEWS && index == reviewIndex
+                                    isFocused = focusSectionForUi == FocusSection.REVIEWS && index == reviewIndex
                                 )
                             }
                         }
@@ -1328,7 +1376,7 @@ private fun DetailsContent(
                     val similarRowState = rememberTvLazyListState()
                     HomeStyleRowAutoScroll(
                         rowState = similarRowState,
-                        isCurrentRow = focusedSection == FocusSection.SIMILAR,
+                        isCurrentRow = focusSectionForUi == FocusSection.SIMILAR,
                         focusedItemIndex = similarIndex,
                         totalItems = similar.size,
                         itemWidth = if (usePosterCards) 91.dp else 180.dp,
@@ -1362,7 +1410,7 @@ private fun DetailsContent(
                                     item = mediaItem,
                                     logoImageUrl = similarLogoUrls["${mediaItem.mediaType}_${mediaItem.id}"],
                                     usePosterCards = usePosterCards,
-                                    isFocused = focusedSection == FocusSection.SIMILAR && index == similarIndex
+                                    isFocused = focusSectionForUi == FocusSection.SIMILAR && index == similarIndex
                                 )
                             }
                         }
@@ -1423,9 +1471,11 @@ private fun HomeStyleRowAutoScroll(
     }
 
     var lastScrollIndex by remember { mutableIntStateOf(-1) }
+    var lastScrollOffset by remember { mutableIntStateOf(-1) }
     LaunchedEffect(isCurrentRow) {
         if (!isCurrentRow) {
             lastScrollIndex = -1
+            lastScrollOffset = -1
         }
     }
     LaunchedEffect(scrollTargetIndex, isCurrentRow, focusedItemIndex) {
@@ -1440,13 +1490,15 @@ private fun HomeStyleRowAutoScroll(
         if (focusedItemIndex == 0 && scrollTargetIndex == 0) {
             rowState.scrollToItem(index = 0, scrollOffset = 0)
             lastScrollIndex = 0
+            lastScrollOffset = 0
             return@LaunchedEffect
         }
 
-        if (lastScrollIndex == scrollTargetIndex && extraOffset == 0) return@LaunchedEffect
+        if (lastScrollIndex == scrollTargetIndex && lastScrollOffset == extraOffset) return@LaunchedEffect
         if (lastScrollIndex == -1) {
             rowState.scrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
             lastScrollIndex = scrollTargetIndex
+            lastScrollOffset = extraOffset
             return@LaunchedEffect
         }
         val currentFirst = rowState.firstVisibleItemIndex
@@ -1457,8 +1509,11 @@ private fun HomeStyleRowAutoScroll(
             rowState.scrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
         } else if (delta != 0) {
             rowState.animateScrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
+        } else if (lastScrollOffset != extraOffset) {
+            rowState.scrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
         }
         lastScrollIndex = scrollTargetIndex
+        lastScrollOffset = extraOffset
     }
 }
 
@@ -1656,6 +1711,8 @@ private fun EpisodeCard(
     val previewText = episode.overview
         .trim()
         .ifEmpty { "No episode synopsis available." }
+    val episodeAirDateLabel = remember(episode.airDate) { formatEpisodeAirDateLabel(episode.airDate) }
+    val isEpisodeUnaired = remember(episode.airDate) { isFutureEpisodeAirDate(episode.airDate) }
 
     val scaleModifier = if (scale != 1f) {
         Modifier.graphicsLayer {
@@ -1726,6 +1783,41 @@ private fun EpisodeCard(
                             letterSpacing = 0.3.sp
                         ),
                         color = Color.White.copy(alpha = 0.95f),
+                        maxLines = 1
+                    )
+                }
+            }
+
+            if (episodeAirDateLabel != null) {
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 8.dp)
+                        .background(Color.Black.copy(alpha = 0.58f), RoundedCornerShape(6.dp))
+                        .border(
+                            width = 1.dp,
+                            color = if (isEpisodeUnaired) Color(0xFF8AD5FF) else Color.White.copy(alpha = 0.24f),
+                            shape = RoundedCornerShape(6.dp)
+                        )
+                        .padding(horizontal = 7.dp, vertical = 3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (isEpisodeUnaired) {
+                        Icon(
+                            imageVector = Icons.Default.Schedule,
+                            contentDescription = null,
+                            tint = Color(0xFF8AD5FF),
+                            modifier = Modifier.size(10.dp)
+                        )
+                    }
+                    Text(
+                        text = episodeAirDateLabel,
+                        style = ArvioSkin.typography.caption.copy(
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        color = if (isEpisodeUnaired) Color(0xFFBDEBFF) else Color.White.copy(alpha = 0.92f),
                         maxLines = 1
                     )
                 }
@@ -1810,6 +1902,32 @@ private fun EpisodeCard(
                 }
             }
         }
+    }
+}
+
+private fun formatEpisodeAirDateLabel(rawDate: String): String? {
+    val value = rawDate.trim()
+    if (value.isEmpty()) return null
+    return try {
+        val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        parser.isLenient = false
+        val date = parser.parse(value) ?: return value
+        SimpleDateFormat("MMM d, yyyy", Locale.US).format(date)
+    } catch (_: Exception) {
+        value
+    }
+}
+
+private fun isFutureEpisodeAirDate(rawDate: String): Boolean {
+    val value = rawDate.trim()
+    if (value.isEmpty()) return false
+    return try {
+        val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        parser.isLenient = false
+        val date = parser.parse(value) ?: return false
+        date.after(Date())
+    } catch (_: Exception) {
+        false
     }
 }
 

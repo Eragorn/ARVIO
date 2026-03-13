@@ -289,6 +289,10 @@ fun AppNavigation(
         ) { backStackEntry ->
             val mediaTypeStr = backStackEntry.arguments?.getString("mediaType") ?: "movie"
             val mediaId = backStackEntry.arguments?.getInt("mediaId") ?: 0
+            if (mediaId <= 0) {
+                navigateHome()
+                return@composable
+            }
             val initialSeason = backStackEntry.arguments?.getInt("initialSeason")?.takeIf { it >= 0 }
             val initialEpisode = backStackEntry.arguments?.getInt("initialEpisode")?.takeIf { it >= 0 }
             val mediaType = if (mediaTypeStr == "tv") MediaType.TV else MediaType.MOVIE

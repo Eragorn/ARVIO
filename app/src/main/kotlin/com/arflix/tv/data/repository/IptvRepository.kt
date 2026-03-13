@@ -676,7 +676,6 @@ class IptvRepository @Inject constructor(
             val favoriteGroups = observeFavoriteGroups().first()
             val favoriteChannels = observeFavoriteChannels().first()
             val grouped = channels.groupBy { it.group.ifBlank { "Uncategorized" } }
-                .toSortedMap(String.CASE_INSENSITIVE_ORDER)
 
             val loadedAtMillis = if (cachedPlaylistAt > 0L) cachedPlaylistAt else now
             val loadedAtInstant = Instant.ofEpochMilli(loadedAtMillis)
@@ -759,7 +758,6 @@ class IptvRepository @Inject constructor(
                 val favoriteGroups = observeFavoriteGroups().first()
                 val favoriteChannels = observeFavoriteChannels().first()
                 val grouped = cachedChannels.groupBy { it.group.ifBlank { "Uncategorized" } }
-                    .toSortedMap(String.CASE_INSENSITIVE_ORDER)
                 val loadedAtMillis = if (cachedPlaylistAt > 0L) cachedPlaylistAt else System.currentTimeMillis()
 
                 IptvSnapshot(
@@ -798,7 +796,6 @@ class IptvRepository @Inject constructor(
         val favoriteGroups = observeFavoriteGroups().first()
         val favoriteChannels = observeFavoriteChannels().first()
         val grouped = channels.groupBy { it.group.ifBlank { "Uncategorized" } }
-            .toSortedMap(String.CASE_INSENSITIVE_ORDER)
         val loadedAtMillis = if (cachedPlaylistAt > 0L) cachedPlaylistAt else System.currentTimeMillis()
         return IptvSnapshot(
             channels = channels,

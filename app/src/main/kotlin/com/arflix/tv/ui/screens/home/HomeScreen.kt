@@ -13,6 +13,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.ui.draw.drawBehind
@@ -86,6 +87,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
@@ -104,13 +106,15 @@ import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.ui.components.MediaCard as ArvioMediaCard
 import com.arflix.tv.ui.components.CardLayoutMode
+import com.arflix.tv.ui.components.AppTopBar
+import com.arflix.tv.ui.components.AppTopBarContentTopInset
 import com.arflix.tv.ui.components.MediaContextMenu
 import com.arflix.tv.ui.components.rememberCardLayoutMode
-import com.arflix.tv.ui.components.Sidebar
 import com.arflix.tv.ui.components.Toast
 import com.arflix.tv.ui.components.ToastType as ComponentToastType
 import com.arflix.tv.ui.components.SidebarItem
-import com.arflix.tv.ui.components.TopBarClock
+import com.arflix.tv.ui.components.topBarFocusedItem
+import com.arflix.tv.ui.components.topBarMaxIndex
 import com.arflix.tv.ui.theme.AnimationConstants
 import com.arflix.tv.ui.theme.ArflixTypography
 import com.arflix.tv.ui.theme.BackgroundCard
@@ -190,6 +194,10 @@ private fun getFocusedItem(categories: List<Category>, rowIndex: Int, itemIndex:
         ?: categories.firstOrNull()?.items?.firstOrNull()
 }
 
+private fun isActionableHomeItem(item: MediaItem?): Boolean {
+    return item != null && item.id > 0 && !item.isPlaceholder
+}
+
 /**
  * Home screen matching webapp design exactly:
  * - Large hero with logo image
@@ -234,14 +242,14 @@ fun HomeScreen(
 
     LaunchedEffect(Unit) {
         // Prevent stale select key events from previous screen from reopening details.
-        suppressSelectUntilMs = SystemClock.elapsedRealtime() + 300L
+        suppressSelectUntilMs = SystemClock.elapsedRealtime() + 900L
     }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                viewModel.refreshContinueWatchingOnly()
-                suppressSelectUntilMs = SystemClock.elapsedRealtime() + 300L
+                viewModel.refreshContinueWatchingOnly(force = true)
+                suppressSelectUntilMs = SystemClock.elapsedRealtime() + 900L
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -258,6 +266,7 @@ fun HomeScreen(
     val displayHeroItem = uiState.heroItem ?: preloadedHeroItem
         ?: displayCategories.firstOrNull()?.items?.firstOrNull()
     val displayHeroLogo = uiState.heroLogoUrl ?: preloadedHeroLogoUrl
+    val displayHeroOverview = uiState.heroOverviewOverride
     val latestDisplayCategories by rememberUpdatedState(displayCategories)
 
     val context = LocalContext.current
@@ -310,7 +319,7 @@ fun HomeScreen(
             )
         )
     }
-    val contentStartPadding = 12.dp
+    val contentStartPadding = 36.dp
 
     // Use rememberSaveable to persist focus position across navigation (back from details page)
     val focusState = rememberSaveable(saver = HomeFocusState.Saver) { HomeFocusState() }
@@ -321,6 +330,12 @@ fun HomeScreen(
     var contextMenuItem by remember { mutableStateOf<MediaItem?>(null) }
     var contextMenuIsContinueWatching by remember { mutableStateOf(false) }
     var contextMenuIsInWatchlist by remember { mutableStateOf(false) }
+
+    BackHandler(enabled = showContextMenu) {
+        showContextMenu = false
+        contextMenuItem = null
+        contextMenuIsContinueWatching = false
+    }
 
     // Preload logos for current and next rows when row changes
     LaunchedEffect(Unit) {
@@ -532,12 +547,6 @@ fun HomeScreen(
             )
         }
         
-        HomeHeroLayer(
-            heroItem = displayHeroItem,
-            heroLogoUrl = displayHeroLogo,
-            contentStartPadding = contentStartPadding
-        )
-
         HomeInputLayer(
             categories = displayCategories,
             cardLogoUrls = cardLogoUrls,
@@ -563,9 +572,13 @@ fun HomeScreen(
             }
         )
 
-        // Clock top-right (profile moved to sidebar)
-        TopBarClock(modifier = Modifier.align(Alignment.TopEnd))
-        
+        HomeHeroLayer(
+            heroItem = displayHeroItem,
+            heroLogoUrl = displayHeroLogo,
+            heroOverviewOverride = displayHeroOverview,
+            contentStartPadding = contentStartPadding
+        )
+
         // Error state - show message when loading failed and no content
         if (!uiState.isLoading && displayCategories.isEmpty() && uiState.error != null) {
             Box(
@@ -601,41 +614,47 @@ fun HomeScreen(
 
         // Context menu
         contextMenuItem?.let { item ->
-            MediaContextMenu(
-                isVisible = showContextMenu,
-                title = item.title,
-                isInWatchlist = contextMenuIsInWatchlist,
-                isWatched = item.isWatched,
-                isContinueWatching = contextMenuIsContinueWatching,
-                onPlay = {
-                    if (viewModel.isIptvItem(item)) {
-                        onNavigateToTv(viewModel.getIptvChannelId(item), viewModel.getIptvStreamUrl(item.id))
-                    } else {
-                        onNavigateToDetails(item.mediaType, item.id, item.nextEpisode?.seasonNumber, item.nextEpisode?.episodeNumber)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .zIndex(120f)
+            ) {
+                MediaContextMenu(
+                    isVisible = showContextMenu,
+                    title = item.title,
+                    isInWatchlist = contextMenuIsInWatchlist,
+                    isWatched = item.isWatched,
+                    isContinueWatching = contextMenuIsContinueWatching,
+                    onPlay = {
+                        if (viewModel.isIptvItem(item)) {
+                            onNavigateToTv(viewModel.getIptvChannelId(item), viewModel.getIptvStreamUrl(item.id))
+                        } else {
+                            onNavigateToDetails(item.mediaType, item.id, item.nextEpisode?.seasonNumber, item.nextEpisode?.episodeNumber)
+                        }
+                    },
+                    onViewDetails = {
+                        if (viewModel.isIptvItem(item)) {
+                            onNavigateToTv(viewModel.getIptvChannelId(item), viewModel.getIptvStreamUrl(item.id))
+                        } else {
+                            onNavigateToDetails(item.mediaType, item.id, item.nextEpisode?.seasonNumber, item.nextEpisode?.episodeNumber)
+                        }
+                    },
+                    onToggleWatchlist = {
+                        viewModel.toggleWatchlist(item)
+                    },
+                    onToggleWatched = {
+                        viewModel.toggleWatched(item)
+                    },
+                    onRemoveFromContinueWatching = if (contextMenuIsContinueWatching) {
+                        { viewModel.removeFromContinueWatching(item) }
+                    } else null,
+                    onDismiss = {
+                        showContextMenu = false
+                        contextMenuItem = null
+                        contextMenuIsContinueWatching = false
                     }
-                },
-                onViewDetails = {
-                    if (viewModel.isIptvItem(item)) {
-                        onNavigateToTv(viewModel.getIptvChannelId(item), viewModel.getIptvStreamUrl(item.id))
-                    } else {
-                        onNavigateToDetails(item.mediaType, item.id, item.nextEpisode?.seasonNumber, item.nextEpisode?.episodeNumber)
-                    }
-                },
-                onToggleWatchlist = {
-                    viewModel.toggleWatchlist(item)
-                },
-                onToggleWatched = {
-                    viewModel.toggleWatched(item)
-                },
-                onRemoveFromContinueWatching = if (contextMenuIsContinueWatching) {
-                    { viewModel.removeFromContinueWatching(item) }
-                } else null,
-                onDismiss = {
-                    showContextMenu = false
-                    contextMenuItem = null
-                    contextMenuIsContinueWatching = false
-                }
-            )
+                )
+            }
         }
 
 
@@ -660,6 +679,7 @@ fun HomeScreen(
 private fun HeroSection(
     item: MediaItem,
     logoUrl: String?,
+    overviewOverride: String? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -694,6 +714,7 @@ private fun HeroSection(
         key(logoUrl, item.id) {
             val currentLogoUrl = logoUrl
             val currentItem = item
+            val configuration = LocalConfiguration.current
             val showInCinema = remember(currentItem.releaseDate, currentItem.mediaType) {
                 isInCinema(currentItem)
             }
@@ -948,19 +969,33 @@ private fun HeroSection(
                 Spacer(modifier = Modifier.height(14.dp))
 
                 // Overview text (EPG data for IPTV, synopsis for movies/shows)
-                Text(
-                    text = currentItem.overview,
-                    style = ArflixTypography.body.copy(
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        lineHeight = 20.sp,
-                        shadow = textShadow
-                    ),
-                    color = Color.White,
-                    maxLines = Int.MAX_VALUE,
-                    overflow = TextOverflow.Clip,
-                    modifier = Modifier.width(560.dp)
-                )
+                val displayOverview = (overviewOverride ?: currentItem.overview)
+                    .replace(Regex("<[^>]*>"), " ")
+                    .replace(Regex("[\\u00A0\\u2007\\u202F]"), " ")
+                    .replace(Regex("\\p{Z}+"), " ")
+                    .replace(Regex("\\s+"), " ")
+                    .trim()
+                    .ifBlank { "No description available." }
+
+                val overviewMaxHeight = 66.dp
+                Box(
+                    modifier = Modifier
+                        .width(560.dp)
+                        .height(overviewMaxHeight)
+                ) {
+                    Text(
+                        text = displayOverview,
+                        style = ArflixTypography.body.copy(
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            lineHeight = 20.sp,
+                            shadow = textShadow
+                        ),
+                        color = Color.White,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
     }
@@ -979,21 +1014,32 @@ private fun formatBudgetCompact(budget: Long): String {
 private fun HomeHeroLayer(
     heroItem: MediaItem?,
     heroLogoUrl: String?,
+    heroOverviewOverride: String?,
     contentStartPadding: androidx.compose.ui.unit.Dp
 ) {
+    val configuration = LocalConfiguration.current
+    val contentRowHeight = (configuration.screenHeightDp * 0.34f).dp.coerceIn(240.dp, 320.dp)
+    val contentRowBottomPadding = 12.dp
+    val contentRowTopPadding = contentRowHeight + contentRowBottomPadding
+    val buttonsBottomPadding = contentRowTopPadding - 10.dp
+    val heroBottomPadding = buttonsBottomPadding + if (configuration.screenHeightDp < 720) 32.dp else 40.dp
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(start = 56.dp)
+            .padding(top = AppTopBarContentTopInset)
+            .zIndex(3f)
     ) {
         heroItem?.let { item ->
             HeroSection(
                 item = item,
                 logoUrl = heroLogoUrl,
+                overviewOverride = heroOverviewOverride,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .padding(bottom = 300.dp, start = contentStartPadding, end = 400.dp)
-            )
+                    .padding(start = contentStartPadding, end = 400.dp)
+                    .offset(y = -heroBottomPadding)
+                )
         }
     }
 }
@@ -1021,10 +1067,11 @@ private fun HomeInputLayer(
 ) {
     val focusRequester = remember { FocusRequester() }
     var selectPressedInHome by remember { mutableStateOf(false) }
+    var selectDownAtMs by remember { mutableLongStateOf(0L) }
     var rootHasFocus by remember { mutableStateOf(false) }
     var preferredCategoryId by rememberSaveable { mutableStateOf<String?>(null) }
     val hasProfile = currentProfile != null
-    val maxSidebarIndex = if (hasProfile) SidebarItem.entries.size else SidebarItem.entries.size - 1  // 5 or 4
+    val maxSidebarIndex = topBarMaxIndex(hasProfile)
 
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
@@ -1086,12 +1133,14 @@ private fun HomeInputLayer(
                             }
                             // Only accept KeyUp action when its KeyDown also happened on this screen.
                             selectPressedInHome = true
+                            if (selectDownAtMs == 0L) {
+                                selectDownAtMs = SystemClock.elapsedRealtime()
+                            }
                             true
                         }
                         Key.DirectionLeft -> {
                             if (!focusState.isSidebarFocused) {
                                 if (focusState.currentItemIndex == 0) {
-                                    focusState.isSidebarFocused = true
                                     true
                                 } else {
                                     focusState.currentItemIndex--
@@ -1099,12 +1148,19 @@ private fun HomeInputLayer(
                                     true
                                 }
                             } else {
+                                if (focusState.sidebarFocusIndex > 0) {
+                                    focusState.sidebarFocusIndex--
+                                    focusState.lastNavEventTime = SystemClock.elapsedRealtime()
+                                }
                                 true
                             }
                         }
                         Key.DirectionRight -> {
                             if (focusState.isSidebarFocused) {
-                                focusState.isSidebarFocused = false
+                                if (focusState.sidebarFocusIndex < maxSidebarIndex) {
+                                    focusState.sidebarFocusIndex++
+                                    focusState.lastNavEventTime = SystemClock.elapsedRealtime()
+                                }
                                 true
                             } else {
                                 val maxItems = categories.getOrNull(focusState.currentRowIndex)?.items?.size ?: 0
@@ -1116,23 +1172,21 @@ private fun HomeInputLayer(
                             }
                         }
                         Key.DirectionUp -> {
-                            if (focusState.isSidebarFocused && focusState.sidebarFocusIndex > 0) {
-                                focusState.sidebarFocusIndex = (focusState.sidebarFocusIndex - 1).coerceIn(0, maxSidebarIndex)
-                                focusState.lastNavEventTime = SystemClock.elapsedRealtime()
+                            if (focusState.isSidebarFocused) {
                                 true
-                            } else if (!focusState.isSidebarFocused && focusState.currentRowIndex > 0) {
+                            } else if (focusState.currentRowIndex > 0) {
                                 focusState.currentRowIndex--
                                 focusState.currentItemIndex = 0
                                 focusState.lastNavEventTime = SystemClock.elapsedRealtime()
                                 true
                             } else {
+                                focusState.isSidebarFocused = true
                                 true
                             }
                         }
                         Key.DirectionDown -> {
-                            if (focusState.isSidebarFocused && focusState.sidebarFocusIndex < maxSidebarIndex) {
-                                focusState.sidebarFocusIndex = (focusState.sidebarFocusIndex + 1).coerceIn(0, maxSidebarIndex)
-                                focusState.lastNavEventTime = SystemClock.elapsedRealtime()
+                            if (focusState.isSidebarFocused) {
+                                focusState.isSidebarFocused = false
                                 true
                             } else if (!focusState.isSidebarFocused && focusState.currentRowIndex < categories.size - 1) {
                                 focusState.currentRowIndex++
@@ -1158,10 +1212,10 @@ private fun HomeInputLayer(
                                     focusState.currentRowIndex,
                                     focusState.currentItemIndex
                                 )
-                                if (currentItem != null) {
+                                currentItem?.takeIf { isActionableHomeItem(it) }?.let { item ->
                                     val currentCategory = categories.getOrNull(focusState.currentRowIndex)
                                     val isContinue = currentCategory?.id == "continue_watching"
-                                    onOpenContextMenu(currentItem, isContinue)
+                                    onOpenContextMenu(item, isContinue)
                                 }
                             }
                             true
@@ -1172,24 +1226,43 @@ private fun HomeInputLayer(
                         Key.Enter, Key.DirectionCenter -> {
                             if (SystemClock.elapsedRealtime() < suppressSelectUntilMs) {
                                 selectPressedInHome = false
+                                selectDownAtMs = 0L
                                 return@onPreviewKeyEvent true
                             }
                             if (!selectPressedInHome) {
                                 // Ignore stale KeyUp events that can arrive after screen navigation.
+                                selectDownAtMs = 0L
                                 return@onPreviewKeyEvent true
                             }
+                            val heldMs = (SystemClock.elapsedRealtime() - selectDownAtMs).coerceAtLeast(0L)
                             selectPressedInHome = false
+                            selectDownAtMs = 0L
+
+                            if (heldMs >= 900L && !focusState.isSidebarFocused) {
+                                val currentItem = getFocusedItem(
+                                    categories,
+                                    focusState.currentRowIndex,
+                                    focusState.currentItemIndex
+                                )
+                                currentItem?.takeIf { isActionableHomeItem(it) }?.let { item ->
+                                    val currentCategory = categories.getOrNull(focusState.currentRowIndex)
+                                    val isContinue = currentCategory?.id == "continue_watching"
+                                    onOpenContextMenu(item, isContinue)
+                                }
+                                return@onPreviewKeyEvent true
+                            }
+
                             if (focusState.isSidebarFocused) {
                                 if (hasProfile && focusState.sidebarFocusIndex == 0) {
                                     onSwitchProfile()
                                 } else {
-                                    val itemIndex = if (hasProfile) focusState.sidebarFocusIndex - 1 else focusState.sidebarFocusIndex
-                                    when (SidebarItem.entries[itemIndex]) {
+                                    when (topBarFocusedItem(focusState.sidebarFocusIndex, hasProfile)) {
                                         SidebarItem.SEARCH -> onNavigateToSearch()
                                         SidebarItem.HOME -> { }
                                         SidebarItem.WATCHLIST -> onNavigateToWatchlist()
                                         SidebarItem.TV -> onNavigateToTv(null, null)
                                         SidebarItem.SETTINGS -> onNavigateToSettings()
+                                        null -> Unit
                                     }
                                 }
                             } else {
@@ -1198,7 +1271,7 @@ private fun HomeInputLayer(
                                     focusState.currentRowIndex,
                                     focusState.currentItemIndex
                                 )
-                                currentItem?.let { item ->
+                                currentItem?.takeIf { isActionableHomeItem(it) }?.let { item ->
                                     val iptvId = item.status?.removePrefix("iptv:")?.takeIf { item.status?.startsWith("iptv:") == true && it.isNotBlank() }
                                     if (iptvId != null) {
                                         onNavigateToTv(iptvId, getIptvStreamUrl(item.id))
@@ -1215,21 +1288,11 @@ private fun HomeInputLayer(
                 }
             }
     ) {
-        Sidebar(
+        AppTopBar(
             selectedItem = SidebarItem.HOME,
-            isSidebarFocused = focusState.isSidebarFocused,
+            isFocused = focusState.isSidebarFocused,
             focusedIndex = focusState.sidebarFocusIndex,
-            profile = currentProfile,
-            onProfileClick = onSwitchProfile,
-            onItemSelected = { item ->
-                when (item) {
-                    SidebarItem.SEARCH -> onNavigateToSearch()
-                    SidebarItem.HOME -> { }
-                    SidebarItem.WATCHLIST -> onNavigateToWatchlist()
-                    SidebarItem.TV -> onNavigateToTv(null, null)
-                    SidebarItem.SETTINGS -> onNavigateToSettings()
-                }
-            }
+            profile = currentProfile
         )
 
         HomeRowsLayer(
@@ -1240,6 +1303,9 @@ private fun HomeInputLayer(
             fastScrollThresholdMs = fastScrollThresholdMs,
             usePosterCards = usePosterCards,
             onItemClick = { item ->
+                if (!isActionableHomeItem(item)) {
+                    return@HomeRowsLayer
+                }
                 val iptvId = item.status?.removePrefix("iptv:")?.takeIf { item.status?.startsWith("iptv:") == true && it.isNotBlank() }
                 if (iptvId != null) {
                     onNavigateToTv(iptvId, getIptvStreamUrl(item.id))
@@ -1275,9 +1341,9 @@ private fun HomeRowsLayer(
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .padding(start = 56.dp)
+            .padding(top = 24.dp)
     ) {
-        val halfHeight = maxHeight / 2
+        val rowsViewportHeight = (maxHeight * 0.31f).coerceIn(260.dp, 340.dp)
         val listState = rememberLazyListState()
         val targetIndex = currentRowIndex.coerceIn(0, (categories.size - 1).coerceAtLeast(0))
         LaunchedEffect(targetIndex) {
@@ -1291,17 +1357,18 @@ private fun HomeRowsLayer(
                 listState.scrollToItem(index = targetIndex, scrollOffset = 0)
             }
         }
-        // Viewport is only the bottom 50%: selected row stays at same height, rows above disappear
+        // Keep rows in the lower portion of the screen so hero metadata has dedicated space,
+        // matching the separation used on Details.
         Box(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .fillMaxWidth()
-                .height(halfHeight)
+                .height(rowsViewportHeight)
                 .clipToBounds()
         ) {
             LazyColumn(
                 state = listState,
-                contentPadding = PaddingValues(bottom = halfHeight),
+                contentPadding = PaddingValues(bottom = rowsViewportHeight),
                 modifier = Modifier
                     .fillMaxSize()
                     .clipToBounds()
@@ -1329,11 +1396,11 @@ private fun HomeRowsLayer(
                         ContentRow(
                             category = category,
                             cardLogoUrls = cardLogoUrls,
-                            isCurrentRow = index == focusState.currentRowIndex,
+                            isCurrentRow = !focusState.isSidebarFocused && index == focusState.currentRowIndex,
                             isRanked = category.title.contains("Top 10", ignoreCase = true),
                             usePosterCards = usePosterCards,
                             startPadding = contentStartPadding,
-                            focusedItemIndex = if (index == focusState.currentRowIndex) focusState.currentItemIndex else 0,
+                            focusedItemIndex = if (!focusState.isSidebarFocused && index == focusState.currentRowIndex) focusState.currentItemIndex else -1,
                             isFastScrolling = isFastScrolling,
                             onItemClick = onItemClick,
                             onItemFocused = { _, itemIdx ->

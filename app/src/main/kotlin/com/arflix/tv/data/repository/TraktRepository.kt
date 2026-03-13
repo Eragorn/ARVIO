@@ -101,6 +101,8 @@ class TraktRepository @Inject constructor(
     private fun continueWatchingCacheKey() = profileManager.profileStringKey("trakt_continue_watching_cache_v1")
     // Local Continue Watching for profiles without Trakt - stores progress locally per profile
     private fun localContinueWatchingKey() = profileManager.profileStringKey("local_continue_watching_v1")
+    private fun localWatchedMoviesKey() = profileManager.profileStringKey("local_watched_movies_v1")
+    private fun localWatchedEpisodesKey() = profileManager.profileStringKey("local_watched_episodes_v1")
 
     data class CloudTraktToken(
         val accessToken: String,
@@ -307,6 +309,117 @@ class TraktRepository @Inject constructor(
         }
     }
 
+    suspend fun exportDismissedContinueWatchingForProfiles(profileIds: List<String>): Map<String, String> {
+        val prefs = context.settingsDataStore.data.first()
+        val out = LinkedHashMap<String, String>()
+        profileIds.forEach { profileId ->
+            val key = profileManager.profileStringKeyFor(profileId, "trakt_dismissed_continue_watching_v1")
+            val raw = prefs[key]?.trim().orEmpty()
+            if (raw.isNotEmpty()) {
+                out[profileId] = raw
+            }
+        }
+        return out
+    }
+
+    suspend fun importDismissedContinueWatchingForProfiles(values: Map<String, String>) {
+        context.settingsDataStore.edit { prefs ->
+            values.forEach { (profileId, raw) ->
+                val key = profileManager.profileStringKeyFor(profileId, "trakt_dismissed_continue_watching_v1")
+                val value = raw.trim()
+                if (value.isEmpty()) {
+                    prefs.remove(key)
+                } else {
+                    prefs[key] = value
+                }
+            }
+        }
+    }
+
+    suspend fun exportLocalContinueWatchingForProfiles(profileIds: List<String>): Map<String, List<ContinueWatchingItem>> {
+        val prefs = context.traktDataStore.data.first()
+        val out = LinkedHashMap<String, List<ContinueWatchingItem>>()
+        profileIds.forEach { profileId ->
+            val key = profileManager.profileStringKeyFor(profileId, "local_continue_watching_v1")
+            val json = prefs[key]?.trim().orEmpty()
+            if (json.isBlank()) return@forEach
+            val items = decodeContinueWatchingList(json)
+            if (items.isNotEmpty()) {
+                out[profileId] = items
+            }
+        }
+        return out
+    }
+
+    suspend fun importLocalContinueWatchingForProfiles(values: Map<String, List<ContinueWatchingItem>>) {
+        context.traktDataStore.edit { prefs ->
+            values.forEach { (profileId, items) ->
+                val key = profileManager.profileStringKeyFor(profileId, "local_continue_watching_v1")
+                if (items.isEmpty()) {
+                    prefs.remove(key)
+                } else {
+                    prefs[key] = gson.toJson(items.take(Constants.MAX_CONTINUE_WATCHING))
+                }
+            }
+        }
+    }
+
+    suspend fun exportLocalWatchedMoviesForProfiles(profileIds: List<String>): Map<String, List<Int>> {
+        val prefs = context.traktDataStore.data.first()
+        val out = LinkedHashMap<String, List<Int>>()
+        profileIds.forEach { profileId ->
+            val key = profileManager.profileStringKeyFor(profileId, "local_watched_movies_v1")
+            val json = prefs[key]?.trim().orEmpty()
+            if (json.isBlank()) return@forEach
+            val ids = decodeIntList(json)
+            if (ids.isNotEmpty()) {
+                out[profileId] = ids
+            }
+        }
+        return out
+    }
+
+    suspend fun importLocalWatchedMoviesForProfiles(values: Map<String, List<Int>>) {
+        context.traktDataStore.edit { prefs ->
+            values.forEach { (profileId, ids) ->
+                val key = profileManager.profileStringKeyFor(profileId, "local_watched_movies_v1")
+                if (ids.isEmpty()) {
+                    prefs.remove(key)
+                } else {
+                    prefs[key] = gson.toJson(ids.distinct())
+                }
+            }
+        }
+    }
+
+    suspend fun exportLocalWatchedEpisodesForProfiles(profileIds: List<String>): Map<String, List<String>> {
+        val prefs = context.traktDataStore.data.first()
+        val out = LinkedHashMap<String, List<String>>()
+        profileIds.forEach { profileId ->
+            val key = profileManager.profileStringKeyFor(profileId, "local_watched_episodes_v1")
+            val json = prefs[key]?.trim().orEmpty()
+            if (json.isBlank()) return@forEach
+            val keys = decodeStringList(json)
+            if (keys.isNotEmpty()) {
+                out[profileId] = keys
+            }
+        }
+        return out
+    }
+
+    suspend fun importLocalWatchedEpisodesForProfiles(values: Map<String, List<String>>) {
+        context.traktDataStore.edit { prefs ->
+            values.forEach { (profileId, keys) ->
+                val key = profileManager.profileStringKeyFor(profileId, "local_watched_episodes_v1")
+                if (keys.isEmpty()) {
+                    prefs.remove(key)
+                } else {
+                    prefs[key] = gson.toJson(keys.distinct())
+                }
+            }
+        }
+    }
+
     private suspend fun getAuthHeader(): String? {
         val token = refreshTokenIfNeeded()
         if (token != null) {
@@ -389,6 +502,7 @@ class TraktRepository @Inject constructor(
     suspend fun markMovieWatched(tmdbId: Int) {
         // OPTIMISTIC UPDATE: Update caches immediately so the UI responds instantly
         updateWatchedCache(tmdbId, null, null, true)
+        persistLocalWatchedSnapshotForCurrentProfile()
         removeFromContinueWatchingCache(tmdbId, null, null)
 
         // Then sync to backend in background
@@ -405,6 +519,7 @@ class TraktRepository @Inject constructor(
     suspend fun markMovieUnwatched(tmdbId: Int) {
         // OPTIMISTIC UPDATE: Update cache immediately so the UI responds instantly
         updateWatchedCache(tmdbId, null, null, false)
+        persistLocalWatchedSnapshotForCurrentProfile()
 
         // Then sync to backend in background
         try {
@@ -421,6 +536,7 @@ class TraktRepository @Inject constructor(
         // OPTIMISTIC UPDATE: Update all caches immediately so the UI responds instantly
         updateWatchedCache(showTmdbId, season, episode, true)
         updateShowWatchedCache(showTmdbId, season, episode, true)
+        persistLocalWatchedSnapshotForCurrentProfile()
         removeFromContinueWatchingCache(showTmdbId, season, episode)
 
         // Then sync to backend in background (don't block UI on network)
@@ -437,6 +553,7 @@ class TraktRepository @Inject constructor(
         // OPTIMISTIC UPDATE: Update all caches immediately so the UI responds instantly
         updateWatchedCache(showTmdbId, season, episode, false)
         updateShowWatchedCache(showTmdbId, season, episode, false)
+        persistLocalWatchedSnapshotForCurrentProfile()
 
         // Then sync to backend in background
         try {
@@ -689,11 +806,12 @@ class TraktRepository @Inject constructor(
      */
     suspend fun getWatchedEpisodesForShow(tmdbId: Int): Set<String> {
         val auth = getAuthHeader()
+        val prefix = "show_tmdb:$tmdbId:"
+        val localOptimistic = watchedEpisodesCache.filter { it.startsWith(prefix) }.toSet()
 
         // For non-Trakt profiles, use the global watched cache (populated from Supabase)
         if (auth == null) {
-            val prefix = "show_tmdb:$tmdbId:"
-            val result = watchedEpisodesCache.filter { it.startsWith(prefix) }.toSet()
+            val result = localOptimistic
 
             // Direct Supabase query to catch any records not yet in cache
             try {
@@ -711,11 +829,11 @@ class TraktRepository @Inject constructor(
         val now = System.currentTimeMillis()
         if (now - showWatchedCacheTime < SHOW_CACHE_DURATION_MS) {
             showWatchedEpisodesCache[tmdbId]?.let { cachedSet ->
-                return cachedSet
+                return (cachedSet + localOptimistic)
             }
         }
 
-        val watchedSet = mutableSetOf<String>()
+        val watchedSet = localOptimistic.toMutableSet()
 
         try {
             // First try to get Trakt ID from cache
@@ -737,8 +855,8 @@ class TraktRepository @Inject constructor(
 
             if (traktId == null) {
                 // Cache empty result to avoid repeated lookups
-                showWatchedEpisodesCache[tmdbId] = emptySet()
-                return emptySet()
+                showWatchedEpisodesCache[tmdbId] = watchedSet
+                return watchedSet
             }
 
             // Get show progress which includes per-episode completion status
@@ -1085,6 +1203,13 @@ class TraktRepository @Inject constructor(
 
                             val nextEp = progress.nextEpisode
                             val isIncomplete = effectiveCompleted < progress.aired
+                            val syntheticProgress = if (progress.aired > 0) {
+                                ((effectiveCompleted.toFloat() / progress.aired.toFloat()) * 100f)
+                                    .toInt()
+                                    .coerceIn(1, 99)
+                            } else {
+                                1
+                            }
 
                             if (isIncomplete && effectiveCompleted >= 1) {
                                 ContinueWatchingCandidate(
@@ -1092,7 +1217,7 @@ class TraktRepository @Inject constructor(
                                         id = tmdbId,
                                         title = show.show.title,
                                         mediaType = MediaType.TV,
-                                        progress = 0,
+                                        progress = syntheticProgress,
                                         season = nextEp?.season,
                                         episode = nextEp?.number,
                                         episodeTitle = nextEp?.title,
@@ -1188,13 +1313,19 @@ class TraktRepository @Inject constructor(
                 val updatedDismissed = dismissed.toMutableMap()
                 val kept = candidates.filter { candidate ->
                     val key = buildContinueWatchingKey(candidate.item)
-                    val dismissedAt = key?.let { dismissed[it] }
+                    val showKey = buildContinueWatchingShowKey(candidate.item.mediaType, candidate.item.id)
+                    val dismissedAt = listOfNotNull(
+                        key?.let { dismissed[it] },
+                        dismissed[showKey]
+                    ).maxOrNull()
+
                     if (dismissedAt == null) {
                         true
                     } else {
                         val activityAt = parseIso8601(candidate.lastActivityAt)
                         if (activityAt > dismissedAt) {
-                            updatedDismissed.remove(key)
+                            key?.let { updatedDismissed.remove(it) }
+                            updatedDismissed.remove(showKey)
                             true
                         } else {
                             false
@@ -1268,11 +1399,14 @@ class TraktRepository @Inject constructor(
 
     suspend fun preloadContinueWatchingCache(): List<ContinueWatchingItem> {
         // Return existing cache if available
-        if (cachedContinueWatching.isNotEmpty()) return cachedContinueWatching
+        if (cachedContinueWatching.isNotEmpty()) {
+            cachedContinueWatching = filterDismissedContinueWatchingItems(cachedContinueWatching)
+            return cachedContinueWatching
+        }
 
         // Profiles without Trakt should preload local continue watching cache.
         if (refreshTokenIfNeeded() == null) {
-            val local = loadLocalContinueWatchingRaw()
+            val local = filterDismissedContinueWatchingItems(loadLocalContinueWatchingRaw())
             cachedContinueWatching = local
             return cachedContinueWatching
         }
@@ -1281,12 +1415,12 @@ class TraktRepository @Inject constructor(
         val currentProfileId = profileManager.getProfileIdSync()
         val preloaded = preloadedProfileCache[currentProfileId]
         if (!preloaded.isNullOrEmpty()) {
-            cachedContinueWatching = preloaded
+            cachedContinueWatching = filterDismissedContinueWatchingItems(preloaded)
             return cachedContinueWatching
         }
 
         // Fall back to loading from DataStore
-        val cached = loadContinueWatchingCache()
+        val cached = filterDismissedContinueWatchingItems(loadContinueWatchingCache())
         cachedContinueWatching = cached
         return cachedContinueWatching
     }
@@ -1310,11 +1444,12 @@ class TraktRepository @Inject constructor(
                 .getParameterized(MutableList::class.java, ContinueWatchingItem::class.java)
                 .type
             val parsed: List<ContinueWatchingItem> = gson.fromJson(json, type)
-            preloadedProfileCache[profileId] = parsed
+            val filtered = filterDismissedContinueWatchingItems(parsed, profileId)
+            preloadedProfileCache[profileId] = filtered
 
             // If this profile becomes active, pre-populate the main cache
             if (profileManager.getProfileIdSync() == profileId) {
-                cachedContinueWatching = parsed
+                cachedContinueWatching = filtered
             }
         } catch (e: Exception) {
             // Silently ignore preload failures - not critical
@@ -1392,7 +1527,9 @@ class TraktRepository @Inject constructor(
         // Always remove from local CW (for non-Trakt profiles) regardless of Trakt cache state
         removeFromLocalContinueWatching(showTmdbId, seasonNum, episodeNum)
 
-        if (cachedContinueWatching.isEmpty()) return
+        if (cachedContinueWatching.isEmpty()) {
+            cachedContinueWatching = loadContinueWatchingCache()
+        }
 
         cachedContinueWatching = cachedContinueWatching.filter { item ->
             // Keep items that don't match the watched episode
@@ -1508,6 +1645,64 @@ class TraktRepository @Inject constructor(
         }
     }
 
+    private suspend fun persistLocalWatchedSnapshotForCurrentProfile() {
+        val movieIds = watchedMoviesCache.toList().distinct().sorted()
+        val episodeKeys = watchedEpisodesCache.toList().distinct().sorted()
+        context.traktDataStore.edit { prefs ->
+            if (movieIds.isEmpty()) {
+                prefs.remove(localWatchedMoviesKey())
+            } else {
+                prefs[localWatchedMoviesKey()] = gson.toJson(movieIds)
+            }
+
+            if (episodeKeys.isEmpty()) {
+                prefs.remove(localWatchedEpisodesKey())
+            } else {
+                prefs[localWatchedEpisodesKey()] = gson.toJson(episodeKeys)
+            }
+        }
+    }
+
+    private suspend fun loadLocalWatchedSnapshotForCurrentProfile(): Pair<Set<Int>, Set<String>> {
+        val prefs = context.traktDataStore.data.first()
+        val movies = decodeIntList(prefs[localWatchedMoviesKey()].orEmpty()).toSet()
+        val episodes = decodeStringList(prefs[localWatchedEpisodesKey()].orEmpty()).toSet()
+        return movies to episodes
+    }
+
+    private fun decodeContinueWatchingList(json: String): List<ContinueWatchingItem> {
+        if (json.isBlank()) return emptyList()
+        return try {
+            val type = TypeToken.getParameterized(MutableList::class.java, ContinueWatchingItem::class.java).type
+            val items: List<ContinueWatchingItem> = gson.fromJson(json, type)
+            items.distinctBy { "${it.mediaType}:${it.id}" }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun decodeIntList(json: String): List<Int> {
+        if (json.isBlank()) return emptyList()
+        return try {
+            val type = TypeToken.getParameterized(MutableList::class.java, Int::class.javaObjectType).type
+            val items: List<Int> = gson.fromJson(json, type)
+            items.distinct()
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun decodeStringList(json: String): List<String> {
+        if (json.isBlank()) return emptyList()
+        return try {
+            val type = TypeToken.getParameterized(MutableList::class.java, String::class.java).type
+            val items: List<String> = gson.fromJson(json, type)
+            items.filter { it.isNotBlank() }.distinct()
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
     /**
      * Load local Continue Watching items (profile-scoped) - raw data without enrichment
      */
@@ -1518,17 +1713,7 @@ class TraktRepository @Inject constructor(
         if (json == null) {
             return emptyList()
         }
-        return try {
-            val type = com.google.gson.reflect.TypeToken
-                .getParameterized(MutableList::class.java, ContinueWatchingItem::class.java)
-                .type
-            val items: List<ContinueWatchingItem> = gson.fromJson(json, type)
-            // Deduplicate at show level — only the most recent episode per show.
-            // Items are ordered most-recent first, so distinctBy keeps the latest.
-            items.distinctBy { "${it.mediaType}:${it.id}" }
-        } catch (_: Exception) {
-            emptyList()
-        }
+        return decodeContinueWatchingList(json)
     }
 
     /**
@@ -1706,12 +1891,36 @@ class TraktRepository @Inject constructor(
 
     suspend fun dismissContinueWatching(item: MediaItem) {
         val key = buildContinueWatchingKey(item) ?: return
+        val showKey = buildContinueWatchingShowKey(item.mediaType, item.id)
         val now = System.currentTimeMillis()
         context.settingsDataStore.edit { prefs ->
             val map = parseDismissedMap(prefs[dismissedContinueWatchingKey()])
             map[key] = now
+            map[showKey] = now
             prefs[dismissedContinueWatchingKey()] = encodeDismissedMap(map)
         }
+
+        cachedContinueWatching = cachedContinueWatching.filterNot {
+            it.id == item.id && it.mediaType == item.mediaType
+        }
+        val activeProfileId = runCatching { profileManager.getProfileIdSync() }.getOrNull()
+        if (!activeProfileId.isNullOrBlank()) {
+            preloadedProfileCache[activeProfileId] = preloadedProfileCache[activeProfileId]
+                ?.filterNot { it.id == item.id && it.mediaType == item.mediaType }
+                .orEmpty()
+        }
+    }
+
+    suspend fun getDismissedContinueWatchingShowKeys(): Set<String> {
+        val dismissed = loadDismissedContinueWatching()
+        if (dismissed.isEmpty()) return emptySet()
+        return dismissed.keys.mapNotNull { key ->
+            when {
+                key.startsWith("movie:") -> key.substringAfterLast(':').toIntOrNull()?.let { "MOVIE:$it" }
+                key.startsWith("tv:") -> key.split(':').getOrNull(1)?.toIntOrNull()?.let { "TV:$it" }
+                else -> null
+            }
+        }.toSet()
     }
 
     private fun buildContinueWatchingKey(item: ContinueWatchingItem): String? {
@@ -1741,6 +1950,14 @@ class TraktRepository @Inject constructor(
         }
     }
 
+    private fun buildContinueWatchingShowKey(mediaType: MediaType, tmdbId: Int): String {
+        return if (mediaType == MediaType.MOVIE) {
+            "movie:$tmdbId"
+        } else {
+            "tv:$tmdbId"
+        }
+    }
+
     private fun parseDismissedMap(raw: String?): MutableMap<String, Long> {
         val map = mutableMapOf<String, Long>()
         if (raw.isNullOrBlank()) return map
@@ -1756,6 +1973,28 @@ class TraktRepository @Inject constructor(
 
     private fun encodeDismissedMap(map: Map<String, Long>): String {
         return map.entries.joinToString("|") { (key, value) -> "$key,$value" }
+    }
+
+    private suspend fun filterDismissedContinueWatchingItems(
+        items: List<ContinueWatchingItem>,
+        profileId: String? = null
+    ): List<ContinueWatchingItem> {
+        if (items.isEmpty()) return emptyList()
+
+        val dismissed = if (profileId.isNullOrBlank()) {
+            loadDismissedContinueWatching()
+        } else {
+            val prefs = context.settingsDataStore.data.first()
+            val key = profileManager.profileStringKeyFor(profileId, "trakt_dismissed_continue_watching_v1")
+            parseDismissedMap(prefs[key])
+        }
+        if (dismissed.isEmpty()) return items
+
+        return items.filterNot { item ->
+            val exactKey = buildContinueWatchingKey(item)
+            val showKey = buildContinueWatchingShowKey(item.mediaType, item.id)
+            dismissed.containsKey(showKey) || (exactKey != null && dismissed.containsKey(exactKey))
+        }
     }
 
     private suspend fun persistContinueWatchingCache(items: List<ContinueWatchingItem>) {
@@ -2369,8 +2608,11 @@ class TraktRepository @Inject constructor(
             return
         }
         cacheInitializing = true
+        val existingMovies = watchedMoviesCache.toSet()
+        val existingEpisodes = watchedEpisodesCache.toSet()
         try {
             val hasTraktAuth = refreshTokenIfNeeded() != null
+            val (localSnapshotMovies, localSnapshotEpisodes) = loadLocalWatchedSnapshotForCurrentProfile()
 
             // Try to load from Supabase first (works for both Trakt and non-Trakt Cloud profiles)
             val supabaseMovies = syncService.getWatchedMovies()
@@ -2379,7 +2621,11 @@ class TraktRepository @Inject constructor(
             // If no Trakt auth AND no Supabase data, leave caches empty
             if (!hasTraktAuth && supabaseMovies.isEmpty() && supabaseEpisodes.isEmpty()) {
                 watchedMoviesCache.clear()
+                watchedMoviesCache.addAll(existingMovies)
+                watchedMoviesCache.addAll(localSnapshotMovies)
                 watchedEpisodesCache.clear()
+                watchedEpisodesCache.addAll(existingEpisodes)
+                watchedEpisodesCache.addAll(localSnapshotEpisodes)
                 cacheInitialized = true
                 return
             }
@@ -2389,21 +2635,37 @@ class TraktRepository @Inject constructor(
             val traktEpisodes = if (supabaseEpisodes.isEmpty() && hasTraktAuth) getWatchedEpisodes() else emptySet()
 
             watchedMoviesCache.clear()
+            watchedMoviesCache.addAll(existingMovies)
+            watchedMoviesCache.addAll(localSnapshotMovies)
             watchedMoviesCache.addAll(if (supabaseMovies.isNotEmpty()) supabaseMovies else traktMovies)
 
             watchedEpisodesCache.clear()
+            watchedEpisodesCache.addAll(existingEpisodes)
+            watchedEpisodesCache.addAll(localSnapshotEpisodes)
             watchedEpisodesCache.addAll(if (supabaseEpisodes.isNotEmpty()) supabaseEpisodes else traktEpisodes)
 
             cacheInitialized = true
         } catch (e: Exception) {
             // If sync service fails, try direct Trakt load (only if Trakt auth available)
             try {
+                val (localSnapshotMovies, localSnapshotEpisodes) = loadLocalWatchedSnapshotForCurrentProfile()
                 val hasTraktFallback = refreshTokenIfNeeded() != null
                 if (hasTraktFallback) {
                     watchedMoviesCache.clear()
+                    watchedMoviesCache.addAll(existingMovies)
+                    watchedMoviesCache.addAll(localSnapshotMovies)
                     watchedMoviesCache.addAll(getWatchedMovies())
                     watchedEpisodesCache.clear()
+                    watchedEpisodesCache.addAll(existingEpisodes)
+                    watchedEpisodesCache.addAll(localSnapshotEpisodes)
                     watchedEpisodesCache.addAll(getWatchedEpisodes())
+                } else {
+                    watchedMoviesCache.clear()
+                    watchedMoviesCache.addAll(existingMovies)
+                    watchedMoviesCache.addAll(localSnapshotMovies)
+                    watchedEpisodesCache.clear()
+                    watchedEpisodesCache.addAll(existingEpisodes)
+                    watchedEpisodesCache.addAll(localSnapshotEpisodes)
                 }
                 cacheInitialized = true
             } catch (_: Exception) {

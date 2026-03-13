@@ -13,6 +13,7 @@ import com.arflix.tv.data.model.StreamSource
 import com.arflix.tv.data.model.Subtitle
 import com.arflix.tv.data.api.TmdbApi
 import com.arflix.tv.data.repository.CloudSyncRepository
+import com.arflix.tv.data.repository.LauncherContinueWatchingRepository
 import com.arflix.tv.data.repository.MediaRepository
 import com.arflix.tv.data.repository.ProfileManager
 import com.arflix.tv.data.repository.StreamRepository
@@ -161,7 +162,8 @@ class DetailsViewModel @Inject constructor(
     private val tmdbApi: TmdbApi,
     private val watchHistoryRepository: WatchHistoryRepository,
     private val watchlistRepository: WatchlistRepository,
-    private val cloudSyncRepository: CloudSyncRepository
+    private val cloudSyncRepository: CloudSyncRepository,
+    private val launcherContinueWatchingRepository: LauncherContinueWatchingRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DetailsUiState())
@@ -231,6 +233,7 @@ class DetailsViewModel @Inject constructor(
                 val previousMatches = previousState.item?.id == mediaId &&
                     previousState.item?.mediaType == mediaType
                 val seasonToLoad = initialSeason ?: 1
+                val hasExplicitEpisodeTarget = mediaType == MediaType.TV && initialSeason != null && initialEpisode != null
                 val previousItem = _uiState.value.item?.takeIf {
                     it.id == mediaId && it.mediaType == mediaType
                 }
@@ -249,6 +252,11 @@ class DetailsViewModel @Inject constructor(
                     totalSeasons = cachedTotalSeasons,
                     playSeason = initialSeason,
                     playEpisode = initialEpisode,
+                    playLabel = if (mediaType == MediaType.TV && initialSeason != null && initialEpisode != null) {
+                        "Continue S${initialSeason}E${initialEpisode}"
+                    } else {
+                        null
+                    },
                     autoPlaySingleSource = autoPlaySingleSource,
                     autoPlayMinQuality = autoPlayMinQuality
                 )
@@ -319,8 +327,10 @@ class DetailsViewModel @Inject constructor(
                 // Get show status
                 val showStatus = if (mediaType == MediaType.TV) mergedItem.status else null
 
-                // Initialize watched cache (works for both Trakt and non-Trakt Cloud profiles)
-                traktRepository.initializeWatchedCache()
+                // Initialize watched cache lazily to avoid wiping optimistic local state.
+                if (runCatching { traktRepository.getWatchedEpisodesFromCache().isEmpty() }.getOrDefault(true)) {
+                    runCatching { traktRepository.initializeWatchedCache() }
+                }
 
                 // Check if item is watched (for movies, check Trakt; for TV, check if started)
                 val isWatched = if (mediaType == MediaType.MOVIE) {
@@ -438,6 +448,10 @@ class DetailsViewModel @Inject constructor(
                 launch {
                     val episodes = runCatching { episodesDeferred?.await() }.getOrNull()
                     if (!episodes.isNullOrEmpty()) {
+                        val resumeTarget = runCatching { resumeDeferred.await() }.getOrNull()
+                        val fallbackTargetSeason = initialSeason ?: resumeTarget?.season
+                        val fallbackTargetEpisode = initialEpisode ?: resumeTarget?.episode
+
                         // Decorate episodes with watched status from cache
                         val watchedKeys = runCatching {
                             traktRepository.getWatchedEpisodesForShow(mediaId)
@@ -447,15 +461,54 @@ class DetailsViewModel @Inject constructor(
                                 val key = "show_tmdb:$mediaId:${ep.seasonNumber}:${ep.episodeNumber}"
                                 if (watchedKeys.contains(key)) ep.copy(isWatched = true) else ep
                             }
-                        } else episodes
+                        } else if (fallbackTargetSeason != null) {
+                            episodes.map { ep ->
+                                when {
+                                    ep.seasonNumber < fallbackTargetSeason -> ep.copy(isWatched = true)
+                                    ep.seasonNumber == fallbackTargetSeason -> ep.copy(
+                                        isWatched = ep.episodeNumber < (fallbackTargetEpisode ?: 1)
+                                    )
+                                    else -> ep
+                                }
+                            }
+                        } else {
+                            val seasonNum = episodes.firstOrNull()?.seasonNumber
+                            val progress = seasonNum?.let { _uiState.value.seasonProgress[it] }
+                            val isFullyWatchedSeason = progress != null && progress.second > 0 && progress.first >= progress.second
+                            if (isFullyWatchedSeason) {
+                                episodes.map { it.copy(isWatched = true) }
+                            } else {
+                                episodes
+                            }
+                        }
 
-                        val initialEpisodeIndex = if (initialEpisode != null) {
-                            decoratedEpisodes.indexOfFirst { it.episodeNumber == initialEpisode }.coerceAtLeast(0)
+                        val targetEpisodeForRow = if (initialSeason == seasonToLoad) initialEpisode else null
+                        val initialEpisodeIndex = if (targetEpisodeForRow != null) {
+                            decoratedEpisodes.indexOfFirst { it.episodeNumber == targetEpisodeForRow }.coerceAtLeast(0)
                         } else 0
+                        val nextUnwatchedEpisode = decoratedEpisodes.firstOrNull { !it.isWatched }
+                        val hasWatchedEpisodes = decoratedEpisodes.any { it.isWatched }
                         updateState { state ->
+                            val shouldUseEpisodeTarget = !hasExplicitEpisodeTarget &&
+                                (state.playLabel.isNullOrBlank() || state.playLabel == "Start S1E1")
                             state.copy(
                                 episodes = decoratedEpisodes,
-                                initialEpisodeIndex = initialEpisodeIndex
+                                initialEpisodeIndex = initialEpisodeIndex,
+                                playSeason = if (shouldUseEpisodeTarget) {
+                                    nextUnwatchedEpisode?.seasonNumber ?: if (hasWatchedEpisodes) 1 else state.playSeason
+                                } else state.playSeason,
+                                playEpisode = if (shouldUseEpisodeTarget) {
+                                    nextUnwatchedEpisode?.episodeNumber ?: if (hasWatchedEpisodes) 1 else state.playEpisode
+                                } else state.playEpisode,
+                                playLabel = if (shouldUseEpisodeTarget) {
+                                    if (nextUnwatchedEpisode != null) {
+                                        "Continue S${nextUnwatchedEpisode.seasonNumber}E${nextUnwatchedEpisode.episodeNumber}"
+                                    } else if (hasWatchedEpisodes) {
+                                        "Start S1E1"
+                                    } else {
+                                        state.playLabel
+                                    }
+                                } else state.playLabel
                             )
                         }
                     }
@@ -469,7 +522,30 @@ class DetailsViewModel @Inject constructor(
 
                 launch {
                     val seasonProgressResult = runCatching { seasonProgressDeferred?.await() }.getOrNull()
-                    val seasonProgress = seasonProgressResult?.progress ?: emptyMap()
+                    val baseSeasonProgress = seasonProgressResult?.progress ?: emptyMap()
+                    val resumeTarget = runCatching { resumeDeferred.await() }.getOrNull()
+                    val fallbackTargetSeason = initialSeason ?: resumeTarget?.season
+                    val fallbackTargetEpisode = initialEpisode ?: resumeTarget?.episode
+                    val seasonProgress = if (
+                        fallbackTargetSeason != null &&
+                        baseSeasonProgress.values.none { it.first > 0 }
+                    ) {
+                        val derived = baseSeasonProgress.toMutableMap()
+                        val targetSeason = fallbackTargetSeason
+                        val targetEpisode = fallbackTargetEpisode ?: 1
+                        for ((seasonNum, counts) in baseSeasonProgress) {
+                            val totalCount = counts.second
+                            val watchedCount = when {
+                                seasonNum < targetSeason -> totalCount
+                                seasonNum == targetSeason -> (targetEpisode - 1).coerceIn(0, totalCount)
+                                else -> 0
+                            }
+                            derived[seasonNum] = Pair(watchedCount, totalCount)
+                        }
+                        derived
+                    } else {
+                        baseSeasonProgress
+                    }
                     val resolvedTotalSeasons = if (mediaType == MediaType.TV) {
                         maxOf(baseState.totalSeasons, seasonProgress.keys.maxOrNull() ?: 0, 1)
                     } else {
@@ -485,6 +561,20 @@ class DetailsViewModel @Inject constructor(
 
                 launch {
                     val resumeInfo = runCatching { resumeDeferred.await() }.getOrNull()
+                    if (initialSeason != null && initialEpisode != null && mediaType == MediaType.TV) {
+                        val matchedResume = resumeInfo?.takeIf {
+                            it.season == initialSeason && it.episode == initialEpisode
+                        }
+                        updateState { state ->
+                            state.copy(
+                                playSeason = initialSeason,
+                                playEpisode = initialEpisode,
+                                playLabel = matchedResume?.label ?: "Continue S${initialSeason}E${initialEpisode}",
+                                playPositionMs = matchedResume?.positionMs
+                            )
+                        }
+                        return@launch
+                    }
                     if (resumeInfo != null) {
                         // Fast path: show Continue immediately from local history.
                         val playTarget = buildPlayTarget(mediaType, null, resumeInfo)
@@ -577,7 +667,15 @@ class DetailsViewModel @Inject constructor(
                             val key = "show_tmdb:$currentMediaId:${ep.seasonNumber}:${ep.episodeNumber}"
                             if (watchedKeys.contains(key)) ep.copy(isWatched = true) else ep
                         }
-                    } else episodes
+                    } else {
+                        val progress = _uiState.value.seasonProgress[seasonNumber]
+                        val isFullyWatchedSeason = progress != null && progress.second > 0 && progress.first >= progress.second
+                        if (isFullyWatchedSeason) {
+                            episodes.map { it.copy(isWatched = true) }
+                        } else {
+                            episodes
+                        }
+                    }
 
                     _uiState.value = _uiState.value.copy(
                         episodes = decoratedEpisodes,
@@ -617,6 +715,7 @@ class DetailsViewModel @Inject constructor(
                         toastMessage = if (newWatched) "Marked as watched" else "Marked as unwatched",
                         toastType = ToastType.SUCCESS
                     )
+                    runCatching { launcherContinueWatchingRepository.refreshForCurrentProfile() }
                 } else {
                     val targetEpisode = _uiState.value.episodes.getOrNull(episodeIndex ?: 0)
                     if (targetEpisode == null) {
@@ -700,6 +799,7 @@ class DetailsViewModel @Inject constructor(
                         },
                         toastType = ToastType.SUCCESS
                     )
+                    runCatching { launcherContinueWatchingRepository.refreshForCurrentProfile() }
                 }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
@@ -850,12 +950,12 @@ class DetailsViewModel @Inject constructor(
                     return PlayTarget(
                         season = seasonNum,
                         episode = firstUnwatched.episodeNumber,
-                        label = "Continue S${seasonNum}-E${firstUnwatched.episodeNumber}"
+                        label = "Continue S${seasonNum}E${firstUnwatched.episodeNumber}"
                     )
                 }
             }
             // All episodes watched — offer restart
-            PlayTarget(season = 1, episode = 1, label = "Start E1-S1")
+            PlayTarget(season = 1, episode = 1, label = "Start S1E1")
         } catch (_: Exception) {
             null
         }
@@ -1039,8 +1139,111 @@ class DetailsViewModel @Inject constructor(
                     } else ep
                 }
                 _uiState.value = _uiState.value.copy(episodes = updatedEpisodes)
+                runCatching { launcherContinueWatchingRepository.refreshForCurrentProfile() }
             } catch (e: Exception) {
                 // Failed silently
+            }
+        }
+    }
+
+    fun markSeasonWatched(season: Int) {
+        if (currentMediaType != MediaType.TV) return
+        val currentItem = _uiState.value.item ?: return
+
+        viewModelScope.launch {
+            try {
+                val seasonEpisodes = if (_uiState.value.currentSeason == season && _uiState.value.episodes.isNotEmpty()) {
+                    _uiState.value.episodes
+                } else {
+                    mediaRepository.getSeasonEpisodes(currentMediaId, season)
+                }
+
+                if (seasonEpisodes.isEmpty()) {
+                    _uiState.value = _uiState.value.copy(
+                        toastMessage = "No episodes found for Season $season",
+                        toastType = ToastType.ERROR
+                    )
+                    return@launch
+                }
+
+                seasonEpisodes.forEach { ep ->
+                    runCatching {
+                        traktRepository.markEpisodeWatched(currentMediaId, season, ep.episodeNumber)
+                        watchHistoryRepository.removeFromHistory(currentMediaId, season, ep.episodeNumber)
+                    }
+                }
+
+                val updatedEpisodes = if (_uiState.value.currentSeason == season) {
+                    _uiState.value.episodes.map { ep ->
+                        if (ep.seasonNumber == season) ep.copy(isWatched = true) else ep
+                    }
+                } else {
+                    _uiState.value.episodes
+                }
+
+                val optimisticProgress = _uiState.value.seasonProgress.toMutableMap().apply {
+                    this[season] = Pair(seasonEpisodes.size, seasonEpisodes.size)
+                }
+                val refreshedProgress = runCatching { fetchSeasonProgress(currentMediaId) }.getOrNull()
+                val nextUnwatched = refreshedProgress?.nextUnwatched
+
+                if (nextUnwatched != null) {
+                    val (nextSeason, nextEpisode) = nextUnwatched
+                    runCatching {
+                        traktRepository.saveLocalContinueWatching(
+                            mediaType = MediaType.TV,
+                            tmdbId = currentMediaId,
+                            title = currentItem.title,
+                            posterPath = currentItem.image,
+                            backdropPath = currentItem.backdrop,
+                            season = nextSeason,
+                            episode = nextEpisode,
+                            episodeTitle = null,
+                            progress = 3,
+                            positionSeconds = 1L,
+                            durationSeconds = 1L,
+                            year = currentItem.year
+                        )
+                        watchHistoryRepository.saveProgress(
+                            mediaType = MediaType.TV,
+                            tmdbId = currentMediaId,
+                            title = currentItem.title,
+                            poster = currentItem.image,
+                            backdrop = currentItem.backdrop,
+                            season = nextSeason,
+                            episode = nextEpisode,
+                            episodeTitle = null,
+                            progress = 0.01f,
+                            duration = 1L,
+                            position = 60L
+                        )
+                    }
+                } else {
+                    runCatching {
+                        traktRepository.removeFromContinueWatchingCache(currentMediaId, null, null)
+                        watchHistoryRepository.removeFromHistory(currentMediaId, null, null)
+                    }
+                }
+
+                val playTarget = buildPlayTarget(currentMediaType, refreshedProgress, null)
+
+                _uiState.value = _uiState.value.copy(
+                    item = currentItem.copy(isWatched = nextUnwatched == null),
+                    episodes = updatedEpisodes,
+                    seasonProgress = refreshedProgress?.progress ?: optimisticProgress,
+                    playSeason = playTarget?.season ?: _uiState.value.playSeason,
+                    playEpisode = playTarget?.episode ?: _uiState.value.playEpisode,
+                    playLabel = playTarget?.label ?: _uiState.value.playLabel,
+                    playPositionMs = playTarget?.positionMs ?: _uiState.value.playPositionMs,
+                    toastMessage = "Season $season marked as watched",
+                    toastType = ToastType.SUCCESS
+                )
+                runCatching { launcherContinueWatchingRepository.refreshForCurrentProfile() }
+            } catch (_: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    toastMessage = "Failed to mark season as watched",
+                    toastType = ToastType.ERROR
+                )
             }
         }
     }
@@ -1056,7 +1259,6 @@ class DetailsViewModel @Inject constructor(
      */
     private suspend fun fetchSeasonProgress(tmdbId: Int): SeasonProgressResult {
         return try {
-            runCatching { traktRepository.initializeWatchedCache() }
             val cachedEpisodes = runCatching { traktRepository.getWatchedEpisodesFromCache() }.getOrDefault(emptySet())
             val cachedCountsBySeason = mutableMapOf<Int, Int>()
             val cachedKeysForShow = cachedEpisodes.filter { it.startsWith("show_tmdb:$tmdbId:") }.toSet()
@@ -1108,7 +1310,7 @@ class DetailsViewModel @Inject constructor(
 
             SeasonProgressResult(
                 progress = progressMap,
-                hasWatched = watchedKeys.isNotEmpty(),
+                hasWatched = watchedKeys.isNotEmpty() || progressMap.values.any { it.first > 0 },
                 nextUnwatched = nextUnwatched
             )
         } catch (e: Exception) {
@@ -1318,7 +1520,7 @@ class DetailsViewModel @Inject constructor(
             PlayTarget(
                 season = 1,
                 episode = 1,
-                label = "Start E1-S1"
+                label = "Start S1E1"
             )
         } else {
             val next = result.nextUnwatched
@@ -1326,13 +1528,13 @@ class DetailsViewModel @Inject constructor(
                 PlayTarget(
                     season = next.first,
                     episode = next.second,
-                    label = "Continue S${next.first}-E${next.second}"
+                    label = "Continue S${next.first}E${next.second}"
                 )
             } else {
                 PlayTarget(
                     season = 1,
                     episode = 1,
-                    label = "Start E1-S1"
+                    label = "Start S1E1"
                 )
             }
         }

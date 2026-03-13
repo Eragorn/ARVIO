@@ -57,9 +57,12 @@ import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.ui.components.LoadingIndicator
 import com.arflix.tv.ui.components.CardLayoutMode
+import com.arflix.tv.ui.components.AppTopBar
+import com.arflix.tv.ui.components.AppTopBarContentTopInset
 import com.arflix.tv.ui.components.MediaCard
-import com.arflix.tv.ui.components.Sidebar
 import com.arflix.tv.ui.components.SidebarItem
+import com.arflix.tv.ui.components.topBarFocusedItem
+import com.arflix.tv.ui.components.topBarMaxIndex
 import com.arflix.tv.ui.components.rememberCardLayoutMode
 import com.arflix.tv.ui.skin.ArvioSkin
 import com.arflix.tv.ui.theme.ArflixTypography
@@ -93,7 +96,7 @@ fun SearchScreen(
 
     var focusZone by remember { mutableStateOf(FocusZone.SEARCH_INPUT) }
     val hasProfile = currentProfile != null
-    val maxSidebarIndex = if (hasProfile) SidebarItem.entries.size else SidebarItem.entries.size - 1
+    val maxSidebarIndex = topBarMaxIndex(hasProfile)
     var sidebarFocusIndex by remember { mutableIntStateOf(if (hasProfile) 1 else 0) } // SEARCH
     var currentRowIndex by remember { mutableIntStateOf(0) } // 0 = Movies, 1 = TV Shows
     var movieItemIndex by remember { mutableIntStateOf(0) }
@@ -153,15 +156,20 @@ fun SearchScreen(
                         Key.DirectionLeft -> {
                             when (focusZone) {
                                 FocusZone.SEARCH_INPUT -> {
-                                    focusZone = FocusZone.SIDEBAR
                                     true
                                 }
                                 FocusZone.RESULTS -> {
                                     val currentIndex = if (currentRowIndex == 0) movieItemIndex else tvItemIndex
                                     if (currentIndex == 0) {
-                                        focusZone = FocusZone.SIDEBAR
+                                        Unit
                                     } else {
                                         if (currentRowIndex == 0) movieItemIndex-- else tvItemIndex--
+                                    }
+                                    true
+                                }
+                                FocusZone.SIDEBAR -> {
+                                    if (sidebarFocusIndex > 0) {
+                                        sidebarFocusIndex = (sidebarFocusIndex - 1).coerceIn(0, maxSidebarIndex)
                                     }
                                     true
                                 }
@@ -171,8 +179,9 @@ fun SearchScreen(
                         Key.DirectionRight -> {
                             when (focusZone) {
                                 FocusZone.SIDEBAR -> {
-                                    focusZone = FocusZone.SEARCH_INPUT
-                                    searchFocusRequester.requestFocus()
+                                    if (sidebarFocusIndex < maxSidebarIndex) {
+                                        sidebarFocusIndex = (sidebarFocusIndex + 1).coerceIn(0, maxSidebarIndex)
+                                    }
                                     true
                                 }
                                 FocusZone.RESULTS -> {
@@ -188,8 +197,9 @@ fun SearchScreen(
                         }
                         Key.DirectionUp -> {
                             when (focusZone) {
-                                FocusZone.SIDEBAR -> if (sidebarFocusIndex > 0) {
-                                    sidebarFocusIndex = (sidebarFocusIndex - 1).coerceIn(0, maxSidebarIndex)
+                                FocusZone.SIDEBAR -> Unit
+                                FocusZone.SEARCH_INPUT -> {
+                                    focusZone = FocusZone.SIDEBAR
                                 }
                                 FocusZone.RESULTS -> {
                                     if (currentRowIndex == 1 && uiState.movieResults.isNotEmpty()) {
@@ -205,8 +215,9 @@ fun SearchScreen(
                         }
                         Key.DirectionDown -> {
                             when (focusZone) {
-                                FocusZone.SIDEBAR -> if (sidebarFocusIndex < maxSidebarIndex) {
-                                    sidebarFocusIndex = (sidebarFocusIndex + 1).coerceIn(0, maxSidebarIndex)
+                                FocusZone.SIDEBAR -> {
+                                    focusZone = FocusZone.SEARCH_INPUT
+                                    searchFocusRequester.requestFocus()
                                 }
                                 FocusZone.SEARCH_INPUT -> {
                                     if (uiState.movieResults.isNotEmpty() || uiState.tvResults.isNotEmpty()) {
@@ -231,13 +242,13 @@ fun SearchScreen(
                                     if (hasProfile && sidebarFocusIndex == 0) {
                                         onSwitchProfile()
                                     } else {
-                                        val itemIndex = if (hasProfile) sidebarFocusIndex - 1 else sidebarFocusIndex
-                                        when (SidebarItem.entries[itemIndex]) {
+                                        when (topBarFocusedItem(sidebarFocusIndex, hasProfile)) {
                                             SidebarItem.SEARCH -> { /* Already here */ }
                                             SidebarItem.HOME -> onNavigateToHome()
                                             SidebarItem.WATCHLIST -> onNavigateToWatchlist()
                                             SidebarItem.TV -> onNavigateToTv()
                                             SidebarItem.SETTINGS -> onNavigateToSettings()
+                                            null -> Unit
                                         }
                                     }
                                     true
@@ -265,26 +276,22 @@ fun SearchScreen(
                 } else false
             }
     ) {
-        Row(modifier = Modifier.fillMaxSize()) {
-            // Sidebar
-            Sidebar(
-                selectedItem = SidebarItem.SEARCH,
-                isSidebarFocused = focusZone == FocusZone.SIDEBAR,
-                focusedIndex = sidebarFocusIndex,
-                profile = currentProfile,
-                onProfileClick = onSwitchProfile
-            )
+        AppTopBar(
+            selectedItem = SidebarItem.SEARCH,
+            isFocused = focusZone == FocusZone.SIDEBAR,
+            focusedIndex = sidebarFocusIndex,
+            profile = currentProfile
+        )
 
-            // Main content
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxSize()
-                    .padding(
-                        horizontal = if (isCompactHeight) 40.dp else 48.dp,
-                        vertical = if (isCompactHeight) 20.dp else 32.dp
-                    )
-            ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = AppTopBarContentTopInset)
+                .padding(
+                    horizontal = if (isCompactHeight) 40.dp else 48.dp,
+                    vertical = if (isCompactHeight) 20.dp else 32.dp
+                )
+        ) {
                 // Centered Search Bar at Top
                 Box(
                     modifier = Modifier
@@ -395,7 +402,6 @@ fun SearchScreen(
                     }
                 }
             }
-        }
     }
 }
 

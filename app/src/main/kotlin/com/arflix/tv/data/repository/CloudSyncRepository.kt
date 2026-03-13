@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.edit
 import com.arflix.tv.data.model.Addon
 import com.arflix.tv.data.model.CatalogConfig
 import com.arflix.tv.data.model.Profile
+import com.arflix.tv.data.repository.ContinueWatchingItem
 import com.arflix.tv.ui.components.CARD_LAYOUT_MODE_LANDSCAPE
 import com.arflix.tv.ui.components.normalizeCardLayoutMode
 import com.arflix.tv.util.settingsDataStore
@@ -161,6 +162,35 @@ class CloudSyncRepository @Inject constructor(
         // Trakt tokens per profile
         val traktTokens = traktRepository.exportTokensForProfiles(profiles.map { it.id })
         root.put("traktTokens", JSONObject(gson.toJson(traktTokens)))
+
+        // Dismissed Continue Watching keys per profile (persist hide/remove state)
+        val dismissedContinueWatchingByProfile =
+            traktRepository.exportDismissedContinueWatchingForProfiles(profiles.map { it.id })
+        root.put(
+            "dismissedContinueWatchingByProfile",
+            JSONObject(gson.toJson(dismissedContinueWatchingByProfile))
+        )
+
+        val localContinueWatchingByProfile =
+            traktRepository.exportLocalContinueWatchingForProfiles(profiles.map { it.id })
+        root.put(
+            "localContinueWatchingByProfile",
+            JSONObject(gson.toJson(localContinueWatchingByProfile))
+        )
+
+        val localWatchedMoviesByProfile =
+            traktRepository.exportLocalWatchedMoviesForProfiles(profiles.map { it.id })
+        root.put(
+            "localWatchedMoviesByProfile",
+            JSONObject(gson.toJson(localWatchedMoviesByProfile))
+        )
+
+        val localWatchedEpisodesByProfile =
+            traktRepository.exportLocalWatchedEpisodesForProfiles(profiles.map { it.id })
+        root.put(
+            "localWatchedEpisodesByProfile",
+            JSONObject(gson.toJson(localWatchedEpisodesByProfile))
+        )
 
         // Addons per profile
         val addonsByProfile = buildMap<String, List<Addon>> {
@@ -456,6 +486,33 @@ class CloudSyncRepository @Inject constructor(
                 watchlistRepository.importWatchlistForProfile(profileId, items)
             }
         }
+
+        // ── Dismissed Continue Watching ──
+        root.optJSONObject("dismissedContinueWatchingByProfile")?.toString()?.takeIf { it.isNotBlank() }?.let { json ->
+            val type = object : TypeToken<Map<String, String>>() {}.type
+            val map: Map<String, String> = gson.fromJson(json, type) ?: emptyMap()
+            traktRepository.importDismissedContinueWatchingForProfiles(map)
+        }
+
+        root.optJSONObject("localContinueWatchingByProfile")?.toString()?.takeIf { it.isNotBlank() }?.let { json ->
+            val type = object : TypeToken<Map<String, List<ContinueWatchingItem>>>() {}.type
+            val map: Map<String, List<ContinueWatchingItem>> = gson.fromJson(json, type) ?: emptyMap()
+            traktRepository.importLocalContinueWatchingForProfiles(map)
+        }
+
+        root.optJSONObject("localWatchedMoviesByProfile")?.toString()?.takeIf { it.isNotBlank() }?.let { json ->
+            val type = object : TypeToken<Map<String, List<Int>>>() {}.type
+            val map: Map<String, List<Int>> = gson.fromJson(json, type) ?: emptyMap()
+            traktRepository.importLocalWatchedMoviesForProfiles(map)
+        }
+
+        root.optJSONObject("localWatchedEpisodesByProfile")?.toString()?.takeIf { it.isNotBlank() }?.let { json ->
+            val type = object : TypeToken<Map<String, List<String>>>() {}.type
+            val map: Map<String, List<String>> = gson.fromJson(json, type) ?: emptyMap()
+            traktRepository.importLocalWatchedEpisodesForProfiles(map)
+        }
+
+        traktRepository.clearAllProfileCaches()
 
         System.err.println("[CLOUD-SYNC] Full cloud restore applied successfully")
     }

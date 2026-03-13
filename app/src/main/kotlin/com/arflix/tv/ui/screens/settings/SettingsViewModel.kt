@@ -1,6 +1,7 @@
 package com.arflix.tv.ui.screens.settings
 
 import android.content.Context
+import com.arflix.tv.BuildConfig
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.lifecycle.ViewModel
@@ -14,6 +15,7 @@ import com.arflix.tv.data.repository.AuthState
 import com.arflix.tv.data.repository.CatalogRepository
 import com.arflix.tv.data.repository.CloudSyncRepository
 import com.arflix.tv.data.repository.IptvRepository
+import com.arflix.tv.data.repository.LauncherContinueWatchingRepository
 import com.arflix.tv.data.repository.MediaRepository
 import com.arflix.tv.data.repository.ProfileManager
 import com.arflix.tv.data.repository.ProfileRepository
@@ -28,6 +30,12 @@ import com.arflix.tv.data.repository.SyncStatus
 import com.arflix.tv.data.repository.SyncResult
 import com.arflix.tv.ui.components.CARD_LAYOUT_MODE_LANDSCAPE
 import com.arflix.tv.ui.components.normalizeCardLayoutMode
+import com.arflix.tv.updater.ApkDownloader
+import com.arflix.tv.updater.ApkInstaller
+import com.arflix.tv.updater.AppUpdate
+import com.arflix.tv.updater.AppUpdateRepository
+import com.arflix.tv.updater.UpdatePreferences
+import com.arflix.tv.updater.VersionUtils
 import com.arflix.tv.util.settingsDataStore
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -35,6 +43,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -42,6 +51,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 import javax.inject.Inject
 
 enum class ToastType {
@@ -88,6 +99,17 @@ data class SettingsUiState(
     val iptvStatusType: ToastType = ToastType.INFO,
     val iptvProgressText: String? = null,
     val iptvProgressPercent: Int = 0,
+    // App updates
+    val isSelfUpdateSupported: Boolean = true,
+    val isCheckingForUpdate: Boolean = false,
+    val availableAppUpdate: AppUpdate? = null,
+    val isAppUpdateAvailable: Boolean = false,
+    val isDownloadingAppUpdate: Boolean = false,
+    val appUpdateDownloadProgress: Float? = null,
+    val downloadedApkPath: String? = null,
+    val showAppUpdateDialog: Boolean = false,
+    val showUnknownSourcesDialog: Boolean = false,
+    val appUpdateError: String? = null,
     // Catalogs
     val catalogs: List<CatalogConfig> = emptyList(),
     // Addons
@@ -112,7 +134,11 @@ class SettingsViewModel @Inject constructor(
     private val profileRepository: ProfileRepository,
     private val tvDeviceAuthRepository: TvDeviceAuthRepository,
     private val traktSyncService: TraktSyncService,
-    private val cloudSyncRepository: CloudSyncRepository
+    private val cloudSyncRepository: CloudSyncRepository,
+    private val launcherContinueWatchingRepository: LauncherContinueWatchingRepository,
+    private val appUpdateRepository: AppUpdateRepository,
+    private val updatePreferences: UpdatePreferences,
+    private val apkDownloader: ApkDownloader
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -167,6 +193,14 @@ class SettingsViewModel @Inject constructor(
         observeIptvConfig()
         initializeCatalogs()
         observeCatalogs()
+        initializeUpdaterState()
+        checkForAppUpdates(force = false, showNoUpdateFeedback = false)
+    }
+
+    private fun initializeUpdaterState() {
+        _uiState.value = _uiState.value.copy(
+            isSelfUpdateSupported = appUpdateRepository.supportsSelfUpdate()
+        )
     }
 
     private fun loadSettings() {
@@ -203,6 +237,7 @@ class SettingsViewModel @Inject constructor(
                 mediaRepository.getDefaultCatalogConfigs()
             }
 
+            val currentState = _uiState.value
             _uiState.value = SettingsUiState(
                 defaultSubtitle = defaultSub,
                 subtitleOptions = subtitleOptions,
@@ -220,6 +255,16 @@ class SettingsViewModel @Inject constructor(
                 traktExpiration = traktExpiration,
                 iptvM3uUrl = iptvConfig.m3uUrl,
                 iptvEpgUrl = iptvConfig.epgUrl,
+                isSelfUpdateSupported = currentState.isSelfUpdateSupported,
+                isCheckingForUpdate = currentState.isCheckingForUpdate,
+                availableAppUpdate = currentState.availableAppUpdate,
+                isAppUpdateAvailable = currentState.isAppUpdateAvailable,
+                isDownloadingAppUpdate = currentState.isDownloadingAppUpdate,
+                appUpdateDownloadProgress = currentState.appUpdateDownloadProgress,
+                downloadedApkPath = currentState.downloadedApkPath,
+                showAppUpdateDialog = currentState.showAppUpdateDialog,
+                showUnknownSourcesDialog = currentState.showUnknownSourcesDialog,
+                appUpdateError = currentState.appUpdateError,
                 catalogs = existingCatalogs,
                 addons = addons
             )
@@ -1279,6 +1324,7 @@ class SettingsViewModel @Inject constructor(
         return when (cloudSyncRepository.pullFromCloud()) {
             CloudSyncRepository.RestoreResult.RESTORED -> {
                 loadSettings()
+                runCatching { launcherContinueWatchingRepository.refreshForCurrentProfile() }
                 if (!silent) {
                     _uiState.value = _uiState.value.copy(
                         toastMessage = "Cloud restore complete",
@@ -1311,6 +1357,141 @@ class SettingsViewModel @Inject constructor(
     fun onCloudProfileSwitchHandled() {
         if (_uiState.value.shouldSwitchProfile) {
             _uiState.value = _uiState.value.copy(shouldSwitchProfile = false)
+        }
+    }
+
+    fun checkForAppUpdates(force: Boolean, showNoUpdateFeedback: Boolean) {
+        if (!appUpdateRepository.supportsSelfUpdate()) {
+            _uiState.value = _uiState.value.copy(
+                isSelfUpdateSupported = false,
+                showAppUpdateDialog = force,
+                appUpdateError = if (force) "This install is managed by the Play Store." else null
+            )
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                isCheckingForUpdate = true,
+                appUpdateError = null,
+                showAppUpdateDialog = false
+            )
+
+            val ignoredTag = updatePreferences.ignoredTag.first()
+            val result = appUpdateRepository.getLatestUpdate()
+            updatePreferences.setLastCheckAtMs(System.currentTimeMillis())
+
+            result
+                .onSuccess { update ->
+                    val remoteNewer = VersionUtils.isRemoteNewer(update.tag, BuildConfig.VERSION_NAME)
+                    val shouldShow = remoteNewer && (ignoredTag == null || ignoredTag != update.tag)
+
+                    _uiState.value = _uiState.value.copy(
+                        isCheckingForUpdate = false,
+                        availableAppUpdate = update,
+                        isAppUpdateAvailable = remoteNewer,
+                        showAppUpdateDialog = shouldShow || force,
+                        appUpdateError = null,
+                        toastMessage = if (showNoUpdateFeedback && !remoteNewer) "You already have the latest version" else _uiState.value.toastMessage,
+                        toastType = if (showNoUpdateFeedback && !remoteNewer) ToastType.INFO else _uiState.value.toastType
+                    )
+                }
+                .onFailure { error ->
+                    _uiState.value = _uiState.value.copy(
+                        isCheckingForUpdate = false,
+                        availableAppUpdate = null,
+                        isAppUpdateAvailable = false,
+                        showAppUpdateDialog = force,
+                        appUpdateError = error.message ?: "Update check failed"
+                    )
+                }
+        }
+    }
+
+    fun dismissAppUpdateDialog() {
+        _uiState.value = _uiState.value.copy(showAppUpdateDialog = false, showUnknownSourcesDialog = false, appUpdateError = null)
+    }
+
+    fun ignoreAppUpdate() {
+        viewModelScope.launch {
+            updatePreferences.setIgnoredTag(_uiState.value.availableAppUpdate?.tag)
+            _uiState.value = _uiState.value.copy(showAppUpdateDialog = false)
+        }
+    }
+
+    fun downloadAppUpdate() {
+        val update = _uiState.value.availableAppUpdate ?: return
+        if (!appUpdateRepository.supportsSelfUpdate()) {
+            _uiState.value = _uiState.value.copy(
+                toastMessage = "This install is managed by the Play Store.",
+                toastType = ToastType.INFO
+            )
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                isDownloadingAppUpdate = true,
+                appUpdateDownloadProgress = 0f,
+                appUpdateError = null,
+                showAppUpdateDialog = true
+            )
+
+            val safeName = update.assetName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+            val dest = File(File(context.cacheDir, "updates"), safeName)
+            val result = withContext(Dispatchers.IO) {
+                apkDownloader.download(update.assetUrl, dest) { downloaded, total ->
+                    val progress = if (total != null && total > 0L) {
+                        (downloaded.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+                    } else {
+                        null
+                    }
+                    _uiState.value = _uiState.value.copy(appUpdateDownloadProgress = progress)
+                }
+            }
+
+            result
+                .onSuccess { file ->
+                    _uiState.value = _uiState.value.copy(
+                        isDownloadingAppUpdate = false,
+                        appUpdateDownloadProgress = 1f,
+                        downloadedApkPath = file.absolutePath,
+                        appUpdateError = null,
+                        showAppUpdateDialog = true
+                    )
+                    installAppUpdateOrRequestPermission()
+                }
+                .onFailure { error ->
+                    _uiState.value = _uiState.value.copy(
+                        isDownloadingAppUpdate = false,
+                        appUpdateDownloadProgress = null,
+                        downloadedApkPath = null,
+                        appUpdateError = error.message ?: "Download failed",
+                        showAppUpdateDialog = true
+                    )
+                }
+        }
+    }
+
+    fun installAppUpdateOrRequestPermission() {
+        val apkPath = _uiState.value.downloadedApkPath ?: return
+        val apkFile = File(apkPath)
+        if (!apkFile.exists()) {
+            _uiState.value = _uiState.value.copy(appUpdateError = "Downloaded file is missing", showAppUpdateDialog = true)
+            return
+        }
+
+        if (!ApkInstaller.canRequestPackageInstalls(context)) {
+            _uiState.value = _uiState.value.copy(showUnknownSourcesDialog = true, showAppUpdateDialog = false)
+            return
+        }
+
+        ApkInstaller.launchInstall(context, apkFile)
+    }
+
+    fun openUnknownSourcesSettings() {
+        ApkInstaller.buildUnknownSourcesSettingsIntent(context)?.let { intent ->
+            context.startActivity(intent)
         }
     }
     
@@ -1359,8 +1540,11 @@ class SettingsViewModel @Inject constructor(
                         toastMessage = "Trakt connected successfully",
                         toastType = ToastType.SUCCESS
                     )
+                    traktRepository.clearContinueWatchingCache()
+                    runCatching { traktRepository.getContinueWatching() }
                     performFullSync(silent = true)
                     syncLocalStateToCloud(silent = true, force = true)
+                    runCatching { launcherContinueWatchingRepository.refreshForCurrentProfile() }
                     return@launch
                 } catch (e: Exception) {
                     // Keep polling on 400 (pending) - user hasn't entered code yet
