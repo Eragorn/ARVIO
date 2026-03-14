@@ -285,7 +285,7 @@ class DetailsViewModel @Inject constructor(
 
                 // Fetch real IMDB ID and TVDB ID from TMDB external_ids endpoint
                 val externalIdsDeferred = async { resolveExternalIds(mediaType, mediaId) }
-                val resumeDeferred = async { fetchResumeInfo(mediaId, mediaType) }
+                val resumeDeferred = async { fetchResumeInfo(mediaId, mediaType, initialSeason, initialEpisode) }
 
                 // For TV shows, also load episodes
                 val episodesDeferred = if (mediaType == MediaType.TV) {
@@ -1037,48 +1037,70 @@ class DetailsViewModel @Inject constructor(
 
                 val result = if (currentMediaType == MediaType.MOVIE) {
                     if (imdbId.isNullOrBlank()) {
-                        com.arflix.tv.data.repository.StreamResult(emptyList(), emptyList())
-                    } else {
-                        streamRepository.resolveMovieStreams(
-                            imdbId = imdbId,
-                            title = item?.title.orEmpty(),
-                            year = item?.year?.toIntOrNull()
+                        _uiState.value = _uiState.value.copy(
+                            isLoadingStreams = false,
+                            streams = emptyList(),
+                            subtitles = emptyList(),
+                            hasStreamingAddons = streamRepository.installedAddons.first()
+                                .count { it.isEnabled && it.type != com.arflix.tv.data.model.AddonType.SUBTITLE } > 0
+                        )
+                        return@launch
+                    }
+                    streamRepository.resolveMovieStreamsProgressive(
+                        imdbId = imdbId,
+                        title = item?.title.orEmpty(),
+                        year = item?.year?.toIntOrNull()
+                    ).collect { progressive ->
+                        if (!isCurrentRequest()) return@collect
+                        val existingVod = _uiState.value.streams.filter { it.addonId == "iptv_xtream_vod" }
+                        val mergedStreams = (progressive.streams + existingVod)
+                            .distinctBy { "${it.url?.trim().orEmpty()}|${it.source}" }
+                        val addonCount = streamRepository.installedAddons.first()
+                            .count { it.isEnabled && it.type != com.arflix.tv.data.model.AddonType.SUBTITLE }
+                        _uiState.value = _uiState.value.copy(
+                            isLoadingStreams = !progressive.isFinal && mergedStreams.isEmpty(),
+                            streams = mergedStreams,
+                            subtitles = progressive.subtitles,
+                            hasStreamingAddons = addonCount > 0
                         )
                     }
+                    return@launch
                 } else {
                     if (imdbId.isNullOrBlank()) {
-                        com.arflix.tv.data.repository.StreamResult(emptyList(), emptyList())
-                    } else {
-                        streamRepository.resolveEpisodeStreams(
-                            imdbId = imdbId,
-                            season = season ?: 1,
-                            episode = episode ?: 1,
-                            tmdbId = currentMediaId,
-                            tvdbId = _uiState.value.tvdbId,
-                            genreIds = genreIds,
-                            originalLanguage = originalLanguage,
-                            title = item?.title ?: ""
+                        _uiState.value = _uiState.value.copy(
+                            isLoadingStreams = false,
+                            streams = emptyList(),
+                            subtitles = emptyList(),
+                            hasStreamingAddons = streamRepository.installedAddons.first()
+                                .count { it.isEnabled && it.type != com.arflix.tv.data.model.AddonType.SUBTITLE } > 0
+                        )
+                        return@launch
+                    }
+                    streamRepository.resolveEpisodeStreamsProgressive(
+                        imdbId = imdbId,
+                        season = season ?: 1,
+                        episode = episode ?: 1,
+                        tmdbId = currentMediaId,
+                        tvdbId = _uiState.value.tvdbId,
+                        genreIds = genreIds,
+                        originalLanguage = originalLanguage,
+                        title = item?.title ?: ""
+                    ).collect { progressive ->
+                        if (!isCurrentRequest()) return@collect
+                        val existingVod = _uiState.value.streams.filter { it.addonId == "iptv_xtream_vod" }
+                        val mergedStreams = (progressive.streams + existingVod)
+                            .distinctBy { "${it.url?.trim().orEmpty()}|${it.source}" }
+                        val addonCount = streamRepository.installedAddons.first()
+                            .count { it.isEnabled && it.type != com.arflix.tv.data.model.AddonType.SUBTITLE }
+                        _uiState.value = _uiState.value.copy(
+                            isLoadingStreams = !progressive.isFinal && mergedStreams.isEmpty(),
+                            streams = mergedStreams,
+                            subtitles = progressive.subtitles,
+                            hasStreamingAddons = addonCount > 0
                         )
                     }
+                    return@launch
                 }
-
-
-                val filteredStreams = result.streams.filter { stream ->
-                    val u = stream.url?.trim().orEmpty()
-                    u.isNotBlank() && !u.startsWith("magnet:", ignoreCase = true)
-                }
-                val existingVod = _uiState.value.streams.filter { it.addonId == "iptv_xtream_vod" }
-                val mergedStreams = (filteredStreams + existingVod)
-                    .distinctBy { "${it.url?.trim().orEmpty()}|${it.source}" }
-                if (!isCurrentRequest()) return@launch
-                val addonCount = streamRepository.installedAddons.first()
-                    .count { it.isEnabled && it.type != com.arflix.tv.data.model.AddonType.SUBTITLE }
-                _uiState.value = _uiState.value.copy(
-                    isLoadingStreams = false,
-                    streams = mergedStreams,
-                    subtitles = result.subtitles,
-                    hasStreamingAddons = addonCount > 0
-                )
             } catch (e: Exception) {
                 if (!isCurrentRequest()) return@launch
                 _uiState.value = _uiState.value.copy(isLoadingStreams = false)
@@ -1200,8 +1222,8 @@ class DetailsViewModel @Inject constructor(
                             episode = nextEpisode,
                             episodeTitle = null,
                             progress = 3,
-                            positionSeconds = 1L,
-                            durationSeconds = 1L,
+                            positionSeconds = 0L, // next episode: no resume position yet
+                            durationSeconds = 0L, // next episode: unknown duration
                             year = currentItem.year
                         )
                         watchHistoryRepository.saveProgress(
@@ -1214,7 +1236,7 @@ class DetailsViewModel @Inject constructor(
                             episode = nextEpisode,
                             episodeTitle = null,
                             progress = 0.01f,
-                            duration = 1L,
+                            duration = 0L,
                             position = 60L
                         )
                     }
@@ -1318,9 +1340,19 @@ class DetailsViewModel @Inject constructor(
         }
     }
 
-    private suspend fun fetchResumeInfo(tmdbId: Int, mediaType: MediaType): ResumeInfo? {
+    private suspend fun fetchResumeInfo(
+        tmdbId: Int,
+        mediaType: MediaType,
+        preferredSeason: Int? = null,
+        preferredEpisode: Int? = null
+    ): ResumeInfo? {
         return try {
-            val entry = watchHistoryRepository.getLatestProgress(mediaType, tmdbId)
+            val exactEntry = if (mediaType == MediaType.TV && preferredSeason != null && preferredEpisode != null) {
+                watchHistoryRepository.getProgress(mediaType, tmdbId, preferredSeason, preferredEpisode)
+            } else {
+                null
+            }
+            val entry = exactEntry ?: watchHistoryRepository.getLatestProgress(mediaType, tmdbId)
             val cloudResume = if (entry != null) {
                 val resume = buildResumeFromProgress(
                     mediaType = mediaType,
@@ -1339,11 +1371,11 @@ class DetailsViewModel @Inject constructor(
                 traktRepository.getLocalContinueWatchingEntry(
                     mediaType = mediaType,
                     tmdbId = tmdbId,
-                    season = entry?.season,
-                    episode = entry?.episode
+                    season = preferredSeason ?: entry?.season,
+                    episode = preferredEpisode ?: entry?.episode
                 )
             }.getOrNull()
-            val localFallbackItem = if (localItem == null) {
+            val localFallbackItem = if (localItem == null && preferredSeason == null && preferredEpisode == null) {
                 runCatching {
                     traktRepository.getBestLocalContinueWatchingEntry(
                         mediaType = mediaType,
@@ -1357,7 +1389,13 @@ class DetailsViewModel @Inject constructor(
             val cachedTraktItem = if (hasTrakt) {
                 runCatching {
                     traktRepository.getCachedContinueWatching()
-                        .firstOrNull { it.id == tmdbId && it.mediaType == mediaType && it.progress > 0 }
+                        .firstOrNull {
+                            it.id == tmdbId &&
+                                it.mediaType == mediaType &&
+                                it.progress > 0 &&
+                                (preferredSeason == null || preferredEpisode == null || mediaType != MediaType.TV ||
+                                    (it.season == preferredSeason && it.episode == preferredEpisode))
+                        }
                 }.getOrNull()
             } else {
                 null
@@ -1366,7 +1404,13 @@ class DetailsViewModel @Inject constructor(
                 withTimeoutOrNull(4_000L) {
                     runCatching {
                         traktRepository.getContinueWatching()
-                            .firstOrNull { it.id == tmdbId && it.mediaType == mediaType && it.progress > 0 }
+                            .firstOrNull {
+                                it.id == tmdbId &&
+                                    it.mediaType == mediaType &&
+                                    it.progress > 0 &&
+                                    (preferredSeason == null || preferredEpisode == null || mediaType != MediaType.TV ||
+                                        (it.season == preferredSeason && it.episode == preferredEpisode))
+                            }
                     }.getOrNull()
                 }
             } else {
@@ -1388,6 +1432,7 @@ class DetailsViewModel @Inject constructor(
             } else null
 
             when {
+                preferredSeason != null && preferredEpisode != null -> localResume ?: cloudResume
                 cloudResume == null -> localResume
                 localResume == null -> cloudResume
                 localResume.positionMs > cloudResume.positionMs -> localResume
@@ -1432,11 +1477,20 @@ class DetailsViewModel @Inject constructor(
             normalizedDuration > 0 && progress > 0f -> (normalizedDuration * progress).toLong()
             else -> 0L
         }
+        val runtimeSeconds = if (mediaType == MediaType.TV || progress > 0f) {
+            resolveRuntimeSeconds(tmdbId, mediaType, season, episode)
+        } else {
+            0L
+        }
         if (seconds <= 0L && progress > 0f) {
-            val runtimeSeconds = resolveRuntimeSeconds(tmdbId, mediaType, season, episode)
             if (runtimeSeconds > 0L) {
                 seconds = (runtimeSeconds * progress).toLong()
             }
+        }
+        if (runtimeSeconds > 0L) {
+            seconds = seconds.coerceIn(1L, runtimeSeconds.coerceAtLeast(1L))
+        } else if (normalizedDuration > 0L) {
+            seconds = seconds.coerceIn(1L, normalizedDuration.coerceAtLeast(1L))
         }
         if (seconds <= 0L) return null
         val timeLabel = formatResumeTime(seconds)

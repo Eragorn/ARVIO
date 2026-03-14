@@ -7,12 +7,31 @@ All notable changes to this project are documented in this file.
 ### Added
 - (Nothing yet)
 
+## [1.9.1] - 2026-03-14
+
+### Improved
+- Playback startup speed improved ~300% through progressive source loading — playback begins from the first responding addon instead of waiting for all addons to finish.
+- Player buffering reduced with larger buffer window, 256MB disk media cache, and stronger connection reuse for large files.
+- Live TV mini-player no longer switches channel on focus change; first click previews, second click opens fullscreen.
+- Search page layout tightened so Movies and TV Shows rows are fully visible and readable under the topbar.
+- Non-English subtitle selection with OpenSubtitles now matches correctly using normalized language tokens.
+
+### Fixed
+- Intermittent crash when pressing play caused by ExoPlayer race conditions during rapid navigation and force-unwrap on nullable season/episode fields.
+- Continue Watching showing wrong resume time on unwatched next episodes (e.g. "Continue S2E2 33:02" after finishing S2E1).
+- Trakt list catalogs disappearing from Homepage after initial load due to premature merge filtering and DataStore re-trigger race.
+- IPTV config for non-primary profiles not persisting to cloud due to cloud push timing before DataStore flush.
+- ExoPlayer onPlayerError listener crash after player release during back navigation.
+- AudioManager unsafe cast crash on non-standard Android TV firmware.
+- Home left-scroll viewport not following focus on first left move.
+
 ## [1.9] - 2026-03-13
 
 ### Added
 - GitHub Releases in-app updater for non-Play installs, including download, installer handoff, and unknown-sources guidance.
 - Android TV / launcher Continue Watching publishing support for launcher channels and Watch Next style surfaces.
 - Cloud backup/restore coverage for non-Trakt local watched state and local Continue Watching across profiles.
+- Downloader code `3366110` documented for direct-install users.
 
 ### Changed
 - App version updated to `1.9` (`versionCode 190`) and Settings version label now reads from `BuildConfig`.

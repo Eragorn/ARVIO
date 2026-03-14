@@ -922,8 +922,10 @@ class SettingsViewModel @Inject constructor(
             // Prevent duplicate auto-refresh from observer right after save.
             lastObservedIptvM3u = trimmedM3u
             iptvRepository.saveConfig(trimmedM3u, trimmedEpg)
-            refreshIptv(showToast = true, configured = true, force = false)
+            // Push to cloud AFTER the DataStore write is confirmed, so all profiles
+            // (not just the active one) have their latest IPTV config captured.
             syncLocalStateToCloud(silent = true)
+            refreshIptv(showToast = true, configured = true, force = false)
         }
     }
 
@@ -1293,6 +1295,9 @@ class SettingsViewModel @Inject constructor(
         if (!force && !_uiState.value.isLoggedIn) return
         if (authRepository.getCurrentUserId().isNullOrBlank()) return
         viewModelScope.launch {
+            // Small delay to ensure DataStore writes from the caller have flushed
+            // before we snapshot all profiles for cloud upload.
+            delay(350)
             var result = cloudSyncRepository.pushToCloud()
             if (result.isFailure) {
                 delay(1200)
@@ -1390,6 +1395,9 @@ class SettingsViewModel @Inject constructor(
                         isCheckingForUpdate = false,
                         availableAppUpdate = update,
                         isAppUpdateAvailable = remoteNewer,
+                        isDownloadingAppUpdate = false,
+                        appUpdateDownloadProgress = null,
+                        downloadedApkPath = if (remoteNewer) _uiState.value.downloadedApkPath else null,
                         showAppUpdateDialog = shouldShow || force,
                         appUpdateError = null,
                         toastMessage = if (showNoUpdateFeedback && !remoteNewer) "You already have the latest version" else _uiState.value.toastMessage,
@@ -1425,6 +1433,15 @@ class SettingsViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(
                 toastMessage = "This install is managed by the Play Store.",
                 toastType = ToastType.INFO
+            )
+            return
+        }
+        if (!_uiState.value.isAppUpdateAvailable) {
+            _uiState.value = _uiState.value.copy(
+                toastMessage = "You already have the latest version",
+                toastType = ToastType.INFO,
+                showAppUpdateDialog = true,
+                downloadedApkPath = null
             )
             return
         }

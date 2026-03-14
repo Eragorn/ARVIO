@@ -36,7 +36,7 @@ class AppUpdateRepository @Inject constructor(
         return installer == "com.android.vending"
     }
 
-    fun supportsSelfUpdate(): Boolean = !isPlayStoreInstall()
+    fun supportsSelfUpdate(): Boolean = BuildConfig.SELF_UPDATE_ENABLED && !isPlayStoreInstall()
 
     suspend fun getLatestUpdate(): Result<AppUpdate> {
         return withContext(Dispatchers.IO) {

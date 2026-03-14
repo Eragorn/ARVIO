@@ -289,14 +289,14 @@ fun SearchScreen(
                 .padding(top = AppTopBarContentTopInset)
                 .padding(
                     horizontal = if (isCompactHeight) 40.dp else 48.dp,
-                    vertical = if (isCompactHeight) 20.dp else 32.dp
+                    vertical = if (isCompactHeight) 4.dp else 8.dp
                 )
         ) {
                 // Centered Search Bar at Top
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = if (isCompactHeight) 20.dp else 32.dp),
+                        .padding(bottom = if (isCompactHeight) 4.dp else 8.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Row(
@@ -384,7 +384,7 @@ fun SearchScreen(
                             focusedItemIndex = movieItemIndex,
                             onItemClick = { item -> onNavigateToDetails(item.mediaType, item.id) }
                         )
-                        Spacer(modifier = Modifier.height(if (isCompactHeight) 4.dp else 8.dp))
+                        Spacer(modifier = Modifier.height(if (isCompactHeight) 0.dp else 2.dp))
                     }
 
                     // TV Shows Row
@@ -422,11 +422,11 @@ private fun SearchResultRow(
     val isCompactHeight = screenHeight <= 780
     val itemWidth = when {
         usePosterCards && screenHeight <= 600 -> 82.dp
-        usePosterCards && screenHeight <= 700 -> 92.dp
-        usePosterCards -> 102.dp
-        !usePosterCards && screenHeight <= 600 -> 170.dp
-        !usePosterCards && screenHeight <= 700 -> 188.dp
-        else -> 210.dp
+        usePosterCards && screenHeight <= 700 -> 96.dp
+        usePosterCards -> 108.dp
+        !usePosterCards && screenHeight <= 600 -> 182.dp
+        !usePosterCards && screenHeight <= 700 -> 204.dp
+        else -> 228.dp
     }
     val itemSpacing = 16.dp
     val rowStartPadding = if (isCompactHeight) 12.dp else 16.dp
@@ -454,13 +454,15 @@ private fun SearchResultRow(
         lastScrollIndex = targetIndex
     }
 
-    Column {
+    Column(
+        modifier = Modifier.padding(bottom = 0.dp)
+    ) {
         // Row Title
         Text(
             text = "$title (${items.size})",
             style = ArvioSkin.typography.sectionTitle,
             color = ArvioSkin.colors.textPrimary,
-            modifier = Modifier.padding(bottom = 12.dp)
+            modifier = Modifier.padding(start = rowStartPadding, bottom = if (isCompactHeight) 4.dp else 5.dp)
         )
 
         // Horizontal Card Row - extra padding to prevent focus scale clipping
@@ -473,8 +475,8 @@ private fun SearchResultRow(
                 contentPadding = PaddingValues(
                     start = rowStartPadding,
                     end = rowEndPadding,
-                    top = if (isCompactHeight) 10.dp else 16.dp,
-                    bottom = if (isCompactHeight) 24.dp else 28.dp
+                    top = 0.dp,
+                    bottom = if (isCompactHeight) 6.dp else 8.dp
                 ),
                 horizontalArrangement = Arrangement.spacedBy(itemSpacing),
                 pivotOffsets = androidx.tv.foundation.PivotOffsets(
@@ -484,14 +486,14 @@ private fun SearchResultRow(
             ) {
                 itemsIndexed(items, key = { _, it -> it.id }) { index, item ->
                     // Create item with year in subtitle (e.g., "Movie | 2023")
-                    val mediaTypeLabel = when (item.mediaType) {
-                        MediaType.TV -> "TV Show"
-                        MediaType.MOVIE -> "Movie"
-                    }
                     val yearValue = item.year.ifBlank { item.releaseDate?.take(4).orEmpty() }
-                    val yearDisplay = if (yearValue.isNotBlank()) " | $yearValue" else ""
                     val displayItem = item.copy(
-                        subtitle = "$mediaTypeLabel$yearDisplay"
+                        subtitle = yearValue.ifBlank {
+                            when (item.mediaType) {
+                                MediaType.TV -> "TV Show"
+                                MediaType.MOVIE -> "Movie"
+                            }
+                        }
                     )
                     MediaCard(
                         item = displayItem,
@@ -499,6 +501,8 @@ private fun SearchResultRow(
                         isLandscape = !usePosterCards,
                         logoImageUrl = cardLogoUrls["${item.mediaType}_${item.id}"],
                         showProgress = false,
+                        titleMaxLines = 2,
+                        subtitleMaxLines = 1,
                         isFocusedOverride = isCurrentRow && index == focusedItemIndex,
                         enableSystemFocus = false,
                         onFocused = { },

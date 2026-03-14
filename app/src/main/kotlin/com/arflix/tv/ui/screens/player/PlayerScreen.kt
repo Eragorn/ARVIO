@@ -87,6 +87,10 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
+import androidx.media3.database.StandaloneDatabaseProvider
+import androidx.media3.datasource.cache.CacheDataSource
+import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
+import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
@@ -169,7 +173,7 @@ fun PlayerScreen(
     var controlsSeekJob by remember { mutableStateOf<Job?>(null) }
 
     // Volume state
-    val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
+    val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: android.media.AudioManager::class.java.getDeclaredConstructor().newInstance() }
     var currentVolume by remember { mutableIntStateOf(audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)) }
     val maxVolume = remember { audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC) }
     var showVolumeIndicator by remember { mutableStateOf(false) }
@@ -231,6 +235,8 @@ fun PlayerScreen(
     var isAutoAdvancing by remember { mutableStateOf(false) }
     var lastProgressReportSecond by remember { mutableLongStateOf(-1L) }
     // Guard against accessing a released ExoPlayer from long-running coroutines (can crash on some devices).
+    // AtomicBoolean gives cross-thread visibility; Compose state drives recomposition.
+    val playerReleasedAtomic = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
     var playerReleased by remember { mutableStateOf(false) }
 
     // Load media
@@ -313,12 +319,12 @@ fun PlayerScreen(
     val playbackHttpClient = remember(playbackCookieJar) {
         OkHttpClient.Builder()
             .cookieJar(playbackCookieJar)
-            .connectionPool(ConnectionPool(5, 5, TimeUnit.MINUTES))
+            .connectionPool(ConnectionPool(8, 10, TimeUnit.MINUTES))
             .followRedirects(true)
             .followSslRedirects(true)
             .retryOnConnectionFailure(true)
-            .connectTimeout(20, TimeUnit.SECONDS)
-            .readTimeout(120, TimeUnit.SECONDS)
+            .connectTimeout(12, TimeUnit.SECONDS)
+            .readTimeout(180, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .build()
     }
@@ -327,22 +333,33 @@ fun PlayerScreen(
             .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
             .setDefaultRequestProperties(baseRequestHeaders)
     }
+    val mediaCache = remember(context) {
+        val cacheDir = java.io.File(context.cacheDir, "media3_playback_cache").apply { mkdirs() }
+        val evictor = LeastRecentlyUsedCacheEvictor(256L * 1024L * 1024L)
+        SimpleCache(cacheDir, evictor, StandaloneDatabaseProvider(context))
+    }
+    val cacheDataSourceFactory = remember(httpDataSourceFactory, mediaCache) {
+        CacheDataSource.Factory()
+            .setCache(mediaCache)
+            .setUpstreamDataSourceFactory(httpDataSourceFactory)
+            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+    }
 
     // Protocol-specific media source factories for faster startup
     val hlsFactory = remember(httpDataSourceFactory) {
-        HlsMediaSource.Factory(httpDataSourceFactory)
+        HlsMediaSource.Factory(cacheDataSourceFactory)
             .setAllowChunklessPreparation(true)  // saves 1-3s HLS startup
     }
     val dashFactory = remember(httpDataSourceFactory) {
-        DashMediaSource.Factory(httpDataSourceFactory)
+        DashMediaSource.Factory(cacheDataSourceFactory)
     }
     val progressiveFactory = remember(httpDataSourceFactory) {
-        ProgressiveMediaSource.Factory(httpDataSourceFactory)
+        ProgressiveMediaSource.Factory(cacheDataSourceFactory)
     }
     // Composite factory: delegates to protocol-specific factory based on URI
     val mediaSourceFactory = remember(httpDataSourceFactory) {
         DefaultMediaSourceFactory(context)
-            .setDataSourceFactory(httpDataSourceFactory)
+            .setDataSourceFactory(cacheDataSourceFactory)
     }
 
     // ExoPlayer - configured for maximum codec compatibility and smooth streaming
@@ -352,13 +369,13 @@ fun PlayerScreen(
         // cannot blow past available memory.
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                15_000,    // minBufferMs — keep refilling once below 15s
-                60_000,    // maxBufferMs — 1 min ahead (reduced from 2 min for OOM safety)
-                500,       // bufferForPlaybackMs — start playing after 0.5s buffered (fast start)
-                2_000      // bufferForPlaybackAfterRebufferMs — 2s after rebuffer
+                30_000,    // minBufferMs — keep a larger safety net for remux / high bitrate files
+                120_000,   // maxBufferMs — allow prebuffering up to 2 min when bandwidth allows
+                250,       // bufferForPlaybackMs — fast first frame
+                1_500      // bufferForPlaybackAfterRebufferMs — resume quickly after short stalls
             )
-            .setTargetBufferBytes(100 * 1024 * 1024) // 100 MB hard cap (prevents OOM on high-bitrate streams)
-            .setPrioritizeTimeOverSizeThresholds(false) // respect byte limit over time limit
+            .setTargetBufferBytes(160 * 1024 * 1024)
+            .setPrioritizeTimeOverSizeThresholds(true)
             .setBackBuffer(10_000, true)
             .build()
 
@@ -427,6 +444,7 @@ fun PlayerScreen(
                     }
 
                     override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                        if (playerReleasedAtomic.get()) return
                         // Source/decoder/network errors on startup should fail over to another source.
                         // Error codes: https://developer.android.com/reference/androidx/media3/common/PlaybackException
                         val isSourceError = error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_DECODER_INIT_FAILED ||
@@ -868,8 +886,9 @@ fun PlayerScreen(
 
     // Update progress periodically
     LaunchedEffect(exoPlayer) {
-        while (!playerReleased) {
-            currentPosition = exoPlayer.currentPosition
+        while (!playerReleasedAtomic.get()) {
+            if (playerReleasedAtomic.get()) break
+            currentPosition = runCatching { exoPlayer.currentPosition }.getOrDefault(currentPosition)
             viewModel.onPlaybackPosition(currentPosition)
             val rawDuration = exoPlayer.duration
             duration = if (rawDuration > 0L && rawDuration != C.TIME_UNSET) rawDuration else 0L
@@ -1066,6 +1085,7 @@ fun PlayerScreen(
     DisposableEffect(Unit) {
         onDispose {
             controlsSeekJob?.cancel()
+            playerReleasedAtomic.set(true)
             playerReleased = true
             runCatching {
                 val safeDuration = exoPlayer.duration.takeIf { it > 0L && it != C.TIME_UNSET } ?: 0L

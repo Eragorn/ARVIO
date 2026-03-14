@@ -196,17 +196,6 @@ fun TvScreen(
             smoothScrollTo(channelsListState, safeChannelIndex)
         }
     }
-    // Auto-play focused channel in mini player (with debounce to avoid spam during fast scrolling)
-    LaunchedEffect(safeChannelIndex, focusZone) {
-        if (focusZone == TvFocusZone.GUIDE && channels.isNotEmpty()) {
-            kotlinx.coroutines.delay(300L) // debounce: wait 300ms after focus settles
-            val focusedChannel = channels.getOrNull(safeChannelIndex)
-            if (focusedChannel != null && playingChannelId != focusedChannel.id) {
-                selectedChannelId = focusedChannel.id
-                playingChannelId = focusedChannel.id
-            }
-        }
-    }
     LaunchedEffect(uiState.isConfigured, uiState.isLoading, uiState.snapshot.channels.size, groups.size) {
         if (uiState.isConfigured && !uiState.isLoading && uiState.snapshot.channels.isEmpty()) {
             viewModel.refresh(force = true, showLoading = true)
@@ -496,11 +485,13 @@ fun TvScreen(
 
                         TvFocusZone.GUIDE -> {
                             channels.getOrNull(safeChannelIndex)?.let { channel ->
-                                // Focus already starts playback in mini player,
-                                // so OK always goes fullscreen
-                                selectedChannelId = channel.id
-                                playingChannelId = channel.id
-                                isFullScreen = true
+                                if (playingChannelId == channel.id) {
+                                    selectedChannelId = channel.id
+                                    isFullScreen = true
+                                } else {
+                                    selectedChannelId = channel.id
+                                    playingChannelId = channel.id
+                                }
                             }
                             true
                         }

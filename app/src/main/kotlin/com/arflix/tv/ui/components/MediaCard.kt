@@ -74,6 +74,8 @@ fun MediaCard(
     isLandscape: Boolean = true,
     logoImageUrl: String? = null,
     showProgress: Boolean = false,
+    titleMaxLines: Int = 1,
+    subtitleMaxLines: Int = 1,
     isFocusedOverride: Boolean = false,
     enableSystemFocus: Boolean = true,
     onFocused: () -> Unit = {},
@@ -252,7 +254,7 @@ fun MediaCard(
             } else {
                 ArvioSkin.colors.textPrimary.copy(alpha = 0.85f)
             },
-            maxLines = 1,
+            maxLines = titleMaxLines,
             overflow = TextOverflow.Ellipsis,
         )
 
@@ -270,7 +272,7 @@ fun MediaCard(
             text = subtitle,
             style = ArvioSkin.typography.caption,
             color = ArvioSkin.colors.textMuted.copy(alpha = 0.85f),
-            maxLines = 1,
+            maxLines = subtitleMaxLines,
             overflow = TextOverflow.Ellipsis,
         )
     }

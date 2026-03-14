@@ -54,6 +54,8 @@ Note: If you mean **DTX**, ARVIO supports **DTS-family audio formats** (DTS/DTS-
 ### Direct Download
 [Download APK](https://github.com/ProdigyV21/ARVIO/releases/latest) from the Releases page.
 
+Downloader code: `3366110`
+
 ## Star History
 
 <p align="center">

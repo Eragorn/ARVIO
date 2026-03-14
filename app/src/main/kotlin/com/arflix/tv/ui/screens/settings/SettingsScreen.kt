@@ -5,6 +5,7 @@ import android.text.method.PasswordTransformationMethod
 import android.os.SystemClock
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
+import androidx.compose.foundation.clickable
 import com.arflix.tv.BuildConfig
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -610,12 +611,16 @@ fun SettingsScreen(
                         statusType = uiState.iptvStatusType,
                         progressText = uiState.iptvProgressText,
                         progressPercent = uiState.iptvProgressPercent,
-                        focusedIndex = if (activeZone == Zone.CONTENT) contentFocusIndex else -1
+                        focusedIndex = if (activeZone == Zone.CONTENT) contentFocusIndex else -1,
+                        onConfigure = { showIptvInput = true },
+                        onRefresh = { viewModel.refreshIptv() },
+                        onDelete = { viewModel.clearIptvConfig() }
                     )
                     "catalogs" -> CatalogsSettings(
                         catalogs = uiState.catalogs,
                         focusedIndex = if (activeZone == Zone.CONTENT) contentFocusIndex else -1,
-                        focusedActionIndex = catalogActionIndex
+                        focusedActionIndex = catalogActionIndex,
+                        onAddCatalog = { showCatalogInput = true }
                     )
                     "addons" -> AddonsSettings(
                         addons = uiState.addons,
@@ -623,7 +628,7 @@ fun SettingsScreen(
                         focusedActionIndex = addonActionIndex,
                         onToggleAddon = { viewModel.toggleAddon(it) },
                         onDeleteAddon = { viewModel.removeAddon(it) },
-                        onAddCustomAddon = { /* TODO: Show input modal */ }
+                        onAddCustomAddon = { showCustomAddonInput = true }
                     )
                     "accounts" -> AccountsSettings(
                         isCloudAuthenticated = uiState.isLoggedIn,
@@ -1325,7 +1330,8 @@ private fun AppUpdateModal(
     onDownload: () -> Unit,
     onInstall: () -> Unit
 ) {
-    var focusedIndex by remember { mutableIntStateOf(2) }
+    val primaryEnabled = downloadedApkPath != null || isAppUpdateAvailable
+    var focusedIndex by remember(primaryEnabled) { mutableIntStateOf(if (primaryEnabled) 2 else 0) }
     val focusRequester = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {
@@ -1363,7 +1369,9 @@ private fun AppUpdateModal(
                             when (focusedIndex) {
                                 0 -> onDismiss()
                                 1 -> onIgnore()
-                                2 -> if (downloadedApkPath != null) onInstall() else onDownload()
+                                2 -> if (primaryEnabled) {
+                                    if (downloadedApkPath != null) onInstall() else onDownload()
+                                }
                             }
                             true
                         }
@@ -1440,11 +1448,15 @@ private fun AppUpdateModal(
                 UpdateActionButton("Close", focusedIndex == 0, onDismiss)
                 UpdateActionButton("Ignore", focusedIndex == 1, onIgnore)
                 UpdateActionButton(
-                    if (downloadedApkPath != null) "Install" else "Download",
+                    when {
+                        downloadedApkPath != null -> "Install"
+                        isAppUpdateAvailable -> "Download"
+                        else -> "Latest"
+                    },
                     focusedIndex == 2,
                     if (downloadedApkPath != null) onInstall else onDownload,
                     highlighted = true,
-                    enabled = isSelfUpdateSupported && !isChecking
+                    enabled = isSelfUpdateSupported && !isChecking && primaryEnabled
                 )
             }
         }
@@ -1707,7 +1719,10 @@ private fun IptvSettings(
     statusType: ToastType,
     progressText: String?,
     progressPercent: Int,
-    focusedIndex: Int
+    focusedIndex: Int,
+    onConfigure: () -> Unit,
+    onRefresh: () -> Unit,
+    onDelete: () -> Unit
 ) {
     Column {
         Text(
@@ -1723,7 +1738,7 @@ private fun IptvSettings(
             subtitle = if (m3uUrl.isBlank()) "Set M3U URL (or Xtream host/user/pass) and optional EPG URL" else "Playlist configured",
             value = if (m3uUrl.isBlank()) "NOT SET" else "$channelCount CH",
             isFocused = focusedIndex == 0,
-            onClick = {}
+            onClick = onConfigure
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -1740,7 +1755,7 @@ private fun IptvSettings(
             subtitle = refreshSubtitle,
             value = if (isLoading) "LOADING" else "REFRESH",
             isFocused = focusedIndex == 1,
-            onClick = {}
+            onClick = onRefresh
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -1751,7 +1766,7 @@ private fun IptvSettings(
             subtitle = if (m3uUrl.isBlank()) "No playlist configured" else "Remove M3U, EPG and favorites",
             value = if (m3uUrl.isBlank()) "EMPTY" else "DELETE",
             isFocused = focusedIndex == 2,
-            onClick = {}
+            onClick = onDelete
         )
 
         if (isLoading && !progressText.isNullOrBlank()) {
@@ -1876,6 +1891,7 @@ private fun SettingsToggleRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable { onToggle(!isEnabled) }
             .background(
                 if (isFocused) Color.White.copy(alpha = 0.1f) else BackgroundElevated,
                 RoundedCornerShape(12.dp)
@@ -1931,7 +1947,8 @@ private fun SettingsToggleRow(
 private fun CatalogsSettings(
     catalogs: List<CatalogConfig>,
     focusedIndex: Int,
-    focusedActionIndex: Int
+    focusedActionIndex: Int,
+    onAddCatalog: () -> Unit
 ) {
     Column {
         Text(
@@ -1953,7 +1970,7 @@ private fun CatalogsSettings(
             subtitle = "Import a Trakt or MDBList catalog URL",
             value = "ADD",
             isFocused = focusedIndex == 0,
-            onClick = {}
+            onClick = onAddCatalog
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -2109,6 +2126,7 @@ private fun AddonsSettings(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .clickable(onClick = onAddCustomAddon)
                 .background(
                     if (focusedIndex == addons.size) Color.White.copy(alpha = 0.1f) else BackgroundElevated,
                     RoundedCornerShape(12.dp)
@@ -2513,6 +2531,9 @@ private fun AccountRow(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable(enabled = !isPolling) {
+                if (isConnected) onDisconnect() else onConnect()
+            }
             .background(
                 if (isFocused) Color.White.copy(alpha = 0.1f) else BackgroundElevated,
                 RoundedCornerShape(12.dp)

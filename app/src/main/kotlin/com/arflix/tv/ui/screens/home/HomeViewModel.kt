@@ -772,7 +772,8 @@ class HomeViewModel @Inject constructor(
                     catalogs.joinToString("|") { "${it.id}:${it.title}:${it.sourceUrl.orEmpty()}" }
                 }
                 .distinctUntilChanged()
-                .drop(1) // Skip first emission (startup) to avoid cancelling the initial loadHomeData
+                .drop(2) // Skip first two emissions to avoid re-triggering loadHomeData during
+                         // initial startup and ensurePreinstalledDefaults DataStore write.
                 .collect {
                     // Apply catalog reorder/add/remove immediately on Home.
                     loadHomeData()
@@ -918,7 +919,12 @@ class HomeViewModel @Inject constructor(
                         catalogRepository.ensurePreinstalledDefaults(
                             mediaRepository.getDefaultCatalogConfigs()
                         )
-                    }.getOrElse { mediaRepository.getDefaultCatalogConfigs() }
+                    }.getOrElse {
+                        // If sync/defaults fail, fall back to whatever is already saved
+                        // (includes user's custom Trakt catalogs) instead of only preinstalled defaults.
+                        runCatching { catalogRepository.getCatalogs() }
+                            .getOrDefault(mediaRepository.getDefaultCatalogConfigs())
+                    }
                 }
                 savedCatalogById.clear()
                 savedCatalogs.forEach { savedCatalogById[it.id] = it }
@@ -1247,9 +1253,13 @@ class HomeViewModel @Inject constructor(
                     } else {
                         baseById[cfg.id] ?: latestState.categories.firstOrNull { it.id == cfg.id }
                     }
-                    val shouldInclude = category?.items?.isNotEmpty() == true
-                    if (shouldInclude && category != null) {
+                    if (category != null && category.items.isNotEmpty()) {
                         merged.add(category)
+                    } else if (customIds.contains(cfg.id) && category == null) {
+                        // Preserve custom catalog placeholder so it is not dropped before its
+                        // network fetch completes. Without this, Trakt lists that haven't
+                        // loaded yet are silently removed from Home on re-merge.
+                        merged.add(Category(id = cfg.id, title = cfg.title, items = emptyList()))
                     }
                 }
                 if (merged.isNotEmpty()) {

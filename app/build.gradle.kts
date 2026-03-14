@@ -18,14 +18,16 @@ android {
     namespace = "com.arflix.tv"
     compileSdk = 34
 
+    flavorDimensions += "distribution"
+
     defaultConfig {
         applicationId = "com.arvio.tv"
         // Fire TV devices can be as low as Android 7.1 (API 25) or lower depending on model/OS.
         // Lower minSdk to maximize compatibility and avoid "There was a problem parsing the package".
         minSdk = 21
         targetSdk = 34
-        versionCode = 190
-        versionName = "1.9"
+        versionCode = 192
+        versionName = "1.9.1"
         buildConfigField("String", "GITHUB_OWNER", "\"ProdigyV21\"")
         buildConfigField("String", "GITHUB_REPO", "\"ARVIO\"")
 
@@ -40,6 +42,17 @@ android {
 
         // Enable R8 full mode for better optimization
         proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+    }
+
+    productFlavors {
+        create("play") {
+            dimension = "distribution"
+            buildConfigField("Boolean", "SELF_UPDATE_ENABLED", "false")
+        }
+        create("sideload") {
+            dimension = "distribution"
+            buildConfigField("Boolean", "SELF_UPDATE_ENABLED", "true")
+        }
     }
 
     // Release signing configuration

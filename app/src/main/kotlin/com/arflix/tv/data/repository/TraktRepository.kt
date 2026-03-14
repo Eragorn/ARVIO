@@ -2792,7 +2792,10 @@ data class ContinueWatchingItem(
     fun toMediaItem(): MediaItem {
         val resumeSeconds = when {
             resumePositionSeconds > 0L -> resumePositionSeconds
-            durationSeconds > 0L && progress in 1..99 -> ((durationSeconds * progress) / 100L).coerceAtLeast(1L)
+            // Only derive resume position from progress if we have a meaningful duration
+            // and progress is above a trivial threshold (>5%) to avoid showing bogus
+            // resume times for placeholder "next episode" entries.
+            durationSeconds > 0L && progress > 5 -> ((durationSeconds * progress) / 100L).coerceAtLeast(1L)
             else -> 0L
         }
         val resumeLabel = resumeSeconds.takeIf { it > 0L }?.let { formatResumeClock(it) }

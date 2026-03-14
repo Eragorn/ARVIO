@@ -28,12 +28,16 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
@@ -655,9 +659,9 @@ class StreamRepository @Inject constructor(
 
     // Stream source requests — generous timeouts to accommodate slow wifi and
     // debrid-backed addons (Torrentio, MediaFusion, etc.) that resolve remotely.
-    private val ADDON_TIMEOUT_MS = 20_000L
+    private val ADDON_TIMEOUT_MS = 15_000L
     // Subtitles should not block playback but need enough time on slow connections.
-    private val SUBTITLE_TIMEOUT_MS = 8_000L
+    private val SUBTITLE_TIMEOUT_MS = 6_000L
     // If addons return nothing, allow Xtream VOD lookup to recover playback.
     private val VOD_LOOKUP_TIMEOUT_MS = 6_000L
     // If addons already returned streams, keep VOD lookup shorter to avoid UI delay.
@@ -710,6 +714,128 @@ class StreamRepository @Inject constructor(
         return ageMs < cacheTtlMsFor(cached.result)
     }
 
+    private suspend fun fetchMovieStreamsFromAddon(addon: Addon, imdbId: String): List<StreamSource> {
+        val startedAt = System.currentTimeMillis()
+        return try {
+            withTimeout(ADDON_TIMEOUT_MS) {
+                val (baseUrl, queryParams) = getAddonBaseUrl(addon.url ?: return@withTimeout emptyList())
+                val url = if (queryParams != null) {
+                    "$baseUrl/stream/movie/$imdbId.json?$queryParams"
+                } else {
+                    "$baseUrl/stream/movie/$imdbId.json"
+                }
+                val response = streamApi.getAddonStreams(url)
+                val streams = processStreams(response.streams ?: emptyList(), addon)
+                recordAddonFetchOutcome(
+                    addonId = addon.id,
+                    success = streams.isNotEmpty(),
+                    latencyMs = System.currentTimeMillis() - startedAt
+                )
+                streams
+            }
+        } catch (_: TimeoutCancellationException) {
+            recordAddonFetchOutcome(
+                addonId = addon.id,
+                success = false,
+                latencyMs = System.currentTimeMillis() - startedAt
+            )
+            emptyList()
+        } catch (_: Exception) {
+            recordAddonFetchOutcome(
+                addonId = addon.id,
+                success = false,
+                latencyMs = System.currentTimeMillis() - startedAt
+            )
+            emptyList()
+        }
+    }
+
+    private suspend fun fetchEpisodeStreamsFromAddon(
+        addon: Addon,
+        imdbId: String,
+        season: Int,
+        episode: Int,
+        tmdbId: Int? = null,
+        tvdbId: Int? = null,
+        genreIds: List<Int> = emptyList(),
+        originalLanguage: String? = null,
+        title: String = ""
+    ): List<StreamSource> {
+        val startedAt = System.currentTimeMillis()
+        return try {
+            withTimeout(ADDON_TIMEOUT_MS) {
+                val (baseUrl, queryParams) = getAddonBaseUrl(addon.url ?: return@withTimeout emptyList())
+
+                val isAnime = animeMapper.isAnimeContent(tmdbId, genreIds, originalLanguage)
+                val animeQuery = if (isAnime) {
+                    withTimeoutOrNull(3_000L) {
+                        animeMapper.resolveAnimeEpisodeQuery(
+                            tmdbId = tmdbId,
+                            tvdbId = tvdbId,
+                            title = title,
+                            imdbId = imdbId,
+                            season = season,
+                            episode = episode
+                        )
+                    }
+                } else null
+
+                val seriesId = "$imdbId:$season:$episode"
+                val supportsKitsu = addon.manifest?.idPrefixes?.contains("kitsu") == true ||
+                    addon.url.contains("torrentio") ||
+                    addon.url.contains("aiostreams") ||
+                    addon.url.contains("mediafusion") ||
+                    addon.url.contains("comet")
+
+                val useKitsu = isAnime && supportsKitsu && animeQuery != null
+                val contentId = if (useKitsu) animeQuery else seriesId
+
+                val url = if (queryParams != null) {
+                    "$baseUrl/stream/series/$contentId.json?$queryParams"
+                } else {
+                    "$baseUrl/stream/series/$contentId.json"
+                }
+
+                val response = streamApi.getAddonStreams(url)
+                var addonStreams = processStreams(response.streams ?: emptyList(), addon)
+
+                if (addonStreams.isEmpty() && useKitsu && contentId != seriesId) {
+                    val fallbackUrl = if (queryParams != null) {
+                        "$baseUrl/stream/series/$seriesId.json?$queryParams"
+                    } else {
+                        "$baseUrl/stream/series/$seriesId.json"
+                    }
+                    try {
+                        val fallbackResponse = streamApi.getAddonStreams(fallbackUrl)
+                        addonStreams = processStreams(fallbackResponse.streams ?: emptyList(), addon)
+                    } catch (_: Exception) {
+                    }
+                }
+
+                recordAddonFetchOutcome(
+                    addonId = addon.id,
+                    success = addonStreams.isNotEmpty(),
+                    latencyMs = System.currentTimeMillis() - startedAt
+                )
+                addonStreams
+            }
+        } catch (_: TimeoutCancellationException) {
+            recordAddonFetchOutcome(
+                addonId = addon.id,
+                success = false,
+                latencyMs = System.currentTimeMillis() - startedAt
+            )
+            emptyList()
+        } catch (_: Exception) {
+            recordAddonFetchOutcome(
+                addonId = addon.id,
+                success = false,
+                latencyMs = System.currentTimeMillis() - startedAt
+            )
+            emptyList()
+        }
+    }
+
     /**
      * Resolve streams for a movie using INSTALLED addons
      * Uses progressive loading - streams appear as each addon responds
@@ -739,43 +865,7 @@ class StreamRepository @Inject constructor(
         }
 
         val prioritizedAddons = streamAddons.sortedByDescending { getAddonHealthBias(it.id) }
-        val streamJobs = prioritizedAddons.map { addon ->
-            async {
-                val startedAt = System.currentTimeMillis()
-                try {
-                    withTimeout(ADDON_TIMEOUT_MS) {
-                        val (baseUrl, queryParams) = getAddonBaseUrl(addon.url ?: return@withTimeout emptyList())
-                        val url = if (queryParams != null) {
-                            "$baseUrl/stream/movie/$imdbId.json?$queryParams"
-                        } else {
-                            "$baseUrl/stream/movie/$imdbId.json"
-                        }
-                        val response = streamApi.getAddonStreams(url)
-                        val streams = processStreams(response.streams ?: emptyList(), addon)
-                        recordAddonFetchOutcome(
-                            addonId = addon.id,
-                            success = streams.isNotEmpty(),
-                            latencyMs = System.currentTimeMillis() - startedAt
-                        )
-                        streams
-                    }
-                } catch (_: TimeoutCancellationException) {
-                    recordAddonFetchOutcome(
-                        addonId = addon.id,
-                        success = false,
-                        latencyMs = System.currentTimeMillis() - startedAt
-                    )
-                    emptyList()
-                } catch (_: Exception) {
-                    recordAddonFetchOutcome(
-                        addonId = addon.id,
-                        success = false,
-                        latencyMs = System.currentTimeMillis() - startedAt
-                    )
-                    emptyList()
-                }
-            }
-        }
+        val streamJobs = prioritizedAddons.map { addon -> async { fetchMovieStreamsFromAddon(addon, imdbId) } }
         val streams = streamJobs.awaitAll().flatten().toMutableList()
 
         // Keep core source lookup fully addon-driven and non-blocking.
@@ -786,6 +876,70 @@ class StreamRepository @Inject constructor(
             streamResultCache[cacheKey] = CachedStreamResult(result = result, createdAtMs = System.currentTimeMillis())
         }
         result
+    }
+
+    fun resolveMovieStreamsProgressive(
+        imdbId: String,
+        title: String = "",
+        year: Int? = null,
+        forceRefresh: Boolean = false
+    ): Flow<ProgressiveStreamResult> = callbackFlow {
+        repositoryScope.launch {
+            ensureAddonHealthLoaded()
+            val allAddons = installedAddons.first()
+            val streamAddons = getStreamAddons(allAddons, "movie", imdbId)
+            val cacheKey = streamCacheKey(
+                profileId = profileManager.getProfileIdSync(),
+                type = "movie",
+                imdbId = imdbId
+            )
+            if (!forceRefresh) {
+                synchronized(streamResultCache) {
+                    val cached = streamResultCache[cacheKey]
+                    if (cached != null && isStreamCacheFresh(cached)) {
+                        trySend(ProgressiveStreamResult(cached.result.streams, cached.result.subtitles, 1, 1, true))
+                        close()
+                        return@launch
+                    }
+                }
+            }
+
+            val prioritizedAddons = streamAddons.sortedByDescending { getAddonHealthBias(it.id) }
+            if (prioritizedAddons.isEmpty()) {
+                trySend(ProgressiveStreamResult(emptyList(), emptyList(), 0, 0, true))
+                close()
+                return@launch
+            }
+
+            val mutex = Mutex()
+            val aggregatedStreams = mutableListOf<StreamSource>()
+            var completed = 0
+            prioritizedAddons.forEach { addon ->
+                launch {
+                    val addonStreams = fetchMovieStreamsFromAddon(addon, imdbId)
+                    val emission = mutex.withLock {
+                        aggregatedStreams.addAll(addonStreams)
+                        completed += 1
+                        val deduped = aggregatedStreams
+                            .filter { stream ->
+                                val u = stream.url?.trim().orEmpty()
+                                u.isNotBlank() && !u.startsWith("magnet:", ignoreCase = true)
+                            }
+                            .distinctBy { "${it.url?.trim().orEmpty()}|${it.source}" }
+                        if (completed == prioritizedAddons.size) {
+                            val finalResult = StreamResult(deduped, emptyList())
+                            synchronized(streamResultCache) {
+                                streamResultCache[cacheKey] = CachedStreamResult(finalResult, System.currentTimeMillis())
+                            }
+                        }
+                        ProgressiveStreamResult(deduped, emptyList(), completed, prioritizedAddons.size, completed == prioritizedAddons.size)
+                    }
+                    trySend(emission)
+                    if (emission.isFinal) close()
+                }
+            }
+        }
+        awaitClose { }
     }
 
     suspend fun resolveMovieVodOnly(
@@ -830,11 +984,12 @@ class StreamRepository @Inject constructor(
 
                 // Extract embedded subtitles from stream
                 val embeddedSubs = stream.subtitles?.mapIndexed { index, sub ->
+                    val normalizedLang = normalizeLanguageCode(sub.lang)
                     Subtitle(
                         id = sub.id ?: "${addon.id}_stream_sub_$index",
                         url = sub.url ?: "",
-                        lang = sub.lang ?: "en",
-                        label = buildSubtitleLabel(sub.lang, sub.label, addon.name)
+                        lang = normalizedLang.ifBlank { "en" },
+                        label = buildSubtitleLabel(normalizedLang, sub.label, addon.name)
                     )
                 } ?: emptyList()
 
@@ -960,68 +1115,17 @@ class StreamRepository @Inject constructor(
         val prioritizedAddons = streamAddons.sortedByDescending { getAddonHealthBias(it.id) }
         val streamJobs = prioritizedAddons.map { addon ->
             async {
-                val startedAt = System.currentTimeMillis()
-                try {
-                    withTimeout(ADDON_TIMEOUT_MS) {
-                        val (baseUrl, queryParams) = getAddonBaseUrl(addon.url ?: return@withTimeout emptyList())
-
-                        // Check if addon supports kitsu IDs (Torrentio, AIOStreams, etc.)
-                        val supportsKitsu = addon.manifest?.idPrefixes?.contains("kitsu") == true ||
-                            addon.url?.contains("torrentio") == true ||
-                            addon.url?.contains("aiostreams") == true ||
-                            addon.url?.contains("mediafusion") == true ||
-                            addon.url?.contains("comet") == true
-
-                        // Use Kitsu ID for anime if addon supports it and we have a mapping
-                        val useKitsu = isAnime && supportsKitsu && animeQuery != null
-                        val contentId = when {
-                            useKitsu -> animeQuery
-                            else -> seriesId
-                        }
-
-                        val url = if (queryParams != null) {
-                            "$baseUrl/stream/series/$contentId.json?$queryParams"
-                        } else {
-                            "$baseUrl/stream/series/$contentId.json"
-                        }
-
-                        val response = streamApi.getAddonStreams(url)
-                        var addonStreams = processStreams(response.streams ?: emptyList(), addon)
-
-                        // Quick fallback: if Kitsu query returned zero results, try IMDB format
-                        if (addonStreams.isEmpty() && useKitsu && contentId != seriesId) {
-                            val fallbackUrl = if (queryParams != null) {
-                                "$baseUrl/stream/series/$seriesId.json?$queryParams"
-                            } else {
-                                "$baseUrl/stream/series/$seriesId.json"
-                            }
-                            try {
-                                val fallbackResponse = streamApi.getAddonStreams(fallbackUrl)
-                                addonStreams = processStreams(fallbackResponse.streams ?: emptyList(), addon)
-                            } catch (_: Exception) {}
-                        }
-                        recordAddonFetchOutcome(
-                            addonId = addon.id,
-                            success = addonStreams.isNotEmpty(),
-                            latencyMs = System.currentTimeMillis() - startedAt
-                        )
-                        addonStreams
-                    }
-                } catch (_: TimeoutCancellationException) {
-                    recordAddonFetchOutcome(
-                        addonId = addon.id,
-                        success = false,
-                        latencyMs = System.currentTimeMillis() - startedAt
-                    )
-                    emptyList()
-                } catch (_: Exception) {
-                    recordAddonFetchOutcome(
-                        addonId = addon.id,
-                        success = false,
-                        latencyMs = System.currentTimeMillis() - startedAt
-                    )
-                    emptyList()
-                }
+                fetchEpisodeStreamsFromAddon(
+                    addon = addon,
+                    imdbId = imdbId,
+                    season = season,
+                    episode = episode,
+                    tmdbId = tmdbId,
+                    tvdbId = tvdbId,
+                    genreIds = genreIds,
+                    originalLanguage = originalLanguage,
+                    title = title
+                )
             }
         }
         val streams = streamJobs.awaitAll().flatten().toMutableList()
@@ -1034,6 +1138,87 @@ class StreamRepository @Inject constructor(
             streamResultCache[cacheKey] = CachedStreamResult(result = result, createdAtMs = System.currentTimeMillis())
         }
         result
+    }
+
+    fun resolveEpisodeStreamsProgressive(
+        imdbId: String,
+        season: Int,
+        episode: Int,
+        tmdbId: Int? = null,
+        tvdbId: Int? = null,
+        genreIds: List<Int> = emptyList(),
+        originalLanguage: String? = null,
+        title: String = "",
+        forceRefresh: Boolean = false
+    ): Flow<ProgressiveStreamResult> = callbackFlow {
+        repositoryScope.launch {
+            ensureAddonHealthLoaded()
+            val allAddons = installedAddons.first()
+            val streamAddons = getStreamAddons(allAddons, "series", imdbId)
+            val cacheKey = streamCacheKey(
+                profileId = profileManager.getProfileIdSync(),
+                type = "series",
+                imdbId = imdbId,
+                season = season,
+                episode = episode
+            )
+            if (!forceRefresh) {
+                synchronized(streamResultCache) {
+                    val cached = streamResultCache[cacheKey]
+                    if (cached != null && isStreamCacheFresh(cached)) {
+                        trySend(ProgressiveStreamResult(cached.result.streams, cached.result.subtitles, 1, 1, true))
+                        close()
+                        return@launch
+                    }
+                }
+            }
+
+            val prioritizedAddons = streamAddons.sortedByDescending { getAddonHealthBias(it.id) }
+            if (prioritizedAddons.isEmpty()) {
+                trySend(ProgressiveStreamResult(emptyList(), emptyList(), 0, 0, true))
+                close()
+                return@launch
+            }
+
+            val mutex = Mutex()
+            val aggregatedStreams = mutableListOf<StreamSource>()
+            var completed = 0
+            prioritizedAddons.forEach { addon ->
+                launch {
+                    val addonStreams = fetchEpisodeStreamsFromAddon(
+                        addon = addon,
+                        imdbId = imdbId,
+                        season = season,
+                        episode = episode,
+                        tmdbId = tmdbId,
+                        tvdbId = tvdbId,
+                        genreIds = genreIds,
+                        originalLanguage = originalLanguage,
+                        title = title
+                    )
+                    val emission = mutex.withLock {
+                        aggregatedStreams.addAll(addonStreams)
+                        completed += 1
+                        val deduped = aggregatedStreams
+                            .filter { stream ->
+                                val u = stream.url?.trim().orEmpty()
+                                u.isNotBlank() && !u.startsWith("magnet:", ignoreCase = true)
+                            }
+                            .distinctBy { "${it.url?.trim().orEmpty()}|${it.source}" }
+                        if (completed == prioritizedAddons.size) {
+                            val finalResult = StreamResult(deduped, emptyList())
+                            synchronized(streamResultCache) {
+                                streamResultCache[cacheKey] = CachedStreamResult(finalResult, System.currentTimeMillis())
+                            }
+                        }
+                        ProgressiveStreamResult(deduped, emptyList(), completed, prioritizedAddons.size, completed == prioritizedAddons.size)
+                    }
+                    trySend(emission)
+                    if (emission.isFinal) close()
+                }
+            }
+        }
+        awaitClose { }
     }
 
     suspend fun resolveEpisodeVodOnly(
@@ -1142,11 +1327,12 @@ class StreamRepository @Inject constructor(
                     )
                     val response = streamApi.getSubtitles(url)
                     response.subtitles?.mapIndexed { index, sub ->
+                        val normalizedLang = normalizeLanguageCode(sub.lang)
                         Subtitle(
                             id = sub.id ?: "${addon.id}_sub_hint_$index",
                             url = sub.url ?: "",
-                            lang = sub.lang ?: "en",
-                            label = buildSubtitleLabel(sub.lang, sub.label, addon.name)
+                            lang = normalizedLang.ifBlank { "en" },
+                            label = buildSubtitleLabel(normalizedLang, sub.label, addon.name)
                         )
                     } ?: emptyList()
                 }
@@ -1186,7 +1372,7 @@ class StreamRepository @Inject constructor(
     }
 
     // Timeout for resolving a single stream URL (redirect chains, debrid resolvers).
-    private val STREAM_RESOLUTION_TIMEOUT_MS = 15_000L
+    private val STREAM_RESOLUTION_TIMEOUT_MS = 8_000L
 
     /**
      * Resolve a single stream for playback - with timeout to prevent hanging forever
@@ -1257,7 +1443,7 @@ class StreamRepository @Inject constructor(
         }
     }
 
-    suspend fun isHttpStreamReachable(stream: StreamSource, timeoutMs: Long = 10_000L): Boolean =
+    suspend fun isHttpStreamReachable(stream: StreamSource, timeoutMs: Long = 2_500L): Boolean =
         withContext(Dispatchers.IO) {
             val resolved = resolveStreamInternal(stream) ?: return@withContext false
             val rawUrl = resolved.url?.trim().orEmpty()
@@ -1739,5 +1925,13 @@ data class AddonConfig(
 data class StreamResult(
     val streams: List<StreamSource>,
     val subtitles: List<Subtitle>
+)
+
+data class ProgressiveStreamResult(
+    val streams: List<StreamSource>,
+    val subtitles: List<Subtitle> = emptyList(),
+    val completedAddons: Int,
+    val totalAddons: Int,
+    val isFinal: Boolean
 )
 

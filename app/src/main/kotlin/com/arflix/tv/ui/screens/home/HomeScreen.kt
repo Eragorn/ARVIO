@@ -1623,9 +1623,11 @@ private fun ContentRow(
     // Keep focused card anchored by scrolling the row on every focus change.
     // Use smooth scroll (animated) for D-pad moves to avoid abrupt jumps.
     var lastScrollIndex by remember { mutableIntStateOf(-1) }
+    var lastScrollOffset by remember { mutableIntStateOf(-1) }
     LaunchedEffect(isCurrentRow) {
         if (!isCurrentRow) {
             lastScrollIndex = -1
+            lastScrollOffset = -1
         }
     }
     LaunchedEffect(scrollTargetIndex, isCurrentRow, focusedItemIndex) {
@@ -1644,25 +1646,32 @@ private fun ContentRow(
         if (focusedItemIndex == 0 && scrollTargetIndex == 0) {
             rowState.scrollToItem(index = 0, scrollOffset = 0)
             lastScrollIndex = 0
+            lastScrollOffset = 0
             return@LaunchedEffect
         }
 
-        if (lastScrollIndex == scrollTargetIndex && extraOffset == 0) return@LaunchedEffect
+        if (lastScrollIndex == scrollTargetIndex && lastScrollOffset == extraOffset) return@LaunchedEffect
         if (lastScrollIndex == -1) {
             // First time we jump directly to the correct position (no animation)
             rowState.scrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
             lastScrollIndex = scrollTargetIndex
+            lastScrollOffset = extraOffset
             return@LaunchedEffect
         }
 
         val currentFirstIndex = rowState.firstVisibleItemIndex
+        val currentLastIndex = rowState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: currentFirstIndex
+        val targetOutsideViewport = focusedItemIndex < currentFirstIndex || focusedItemIndex > currentLastIndex
         val jumpDistance = kotlin.math.abs(scrollTargetIndex - currentFirstIndex)
-        if (isFastScrolling || jumpDistance > 1) {
+        if (isFastScrolling || extraOffset > 0 || jumpDistance > 1) {
             rowState.scrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
-        } else {
+        } else if (scrollTargetIndex != currentFirstIndex || targetOutsideViewport) {
             rowState.animateScrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
+        } else {
+            rowState.scrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
         }
         lastScrollIndex = scrollTargetIndex
+        lastScrollOffset = extraOffset
     }
 
     // Performance: Remove rowState from remember keys - derivedStateOf handles state tracking

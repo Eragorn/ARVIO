@@ -106,6 +106,8 @@ class PlayerViewModel @Inject constructor(
     // Skip intro
     private var skipIntervals: List<SkipInterval> = emptyList()
     private var lastActiveSkipType: String? = null
+    private var skipIntervalsJob: kotlinx.coroutines.Job? = null
+    private var activeSkipRequestKey: String? = null
 
     private val SKIP_INTERVAL_SHOW_EARLY_MS = 1_200L
     private val SKIP_INTERVAL_END_GUARD_MS = 500L
@@ -154,9 +156,11 @@ class PlayerViewModel @Inject constructor(
         lastWatchHistorySaveTime = 0
         subtitleRefreshJob?.cancel()
         vodAppendJob?.cancel()
+        skipIntervalsJob?.cancel()
         currentImdbId = providedImdbId
         skipIntervals = emptyList()
         lastActiveSkipType = null
+        activeSkipRequestKey = null
         _uiState.value = _uiState.value.copy(activeSkipInterval = null, skipIntervalDismissed = false)
         val cachedItem = mediaRepository.getCachedItem(mediaType, mediaId)
         currentOriginalLanguage = cachedItem?.originalLanguage
@@ -200,11 +204,12 @@ class PlayerViewModel @Inject constructor(
 
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    isLoadingStreams = true,
+                    isLoadingStreams = false,
                     selectedStreamUrl = resolvedProvidedUrl,
                     savedPosition = resumeData.positionMs
                 )
                 launch {
+                    kotlinx.coroutines.delay(1_500L)
                     populateStreamsForProvidedUrl(
                         mediaType = mediaType,
                         mediaId = mediaId,
@@ -340,92 +345,90 @@ class PlayerViewModel @Inject constructor(
                     )
                 }
 
-                // Fetch streams IMMEDIATELY
-                val result = if (mediaType == MediaType.MOVIE) {
-                    streamRepository.resolveMovieStreams(
+                // Get saved position for resume playback
+                val resumeData = resumeDataDeferred.await()
+                val streamingAddonCount = streamRepository.installedAddons.first()
+                    .count { it.isEnabled && it.type != com.arflix.tv.data.model.AddonType.SUBTITLE }
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    isLoadingStreams = true,
+                    savedPosition = resumeData.positionMs,
+                    error = null,
+                    isSetupError = false
+                )
+
+                var firstPlayableSelected = false
+                val preferredLanguage = _uiState.value.preferredAudioLanguage.ifBlank { resolvePreferredAudioLanguage() }
+                val progressiveFlow = if (mediaType == MediaType.MOVIE) {
+                    streamRepository.resolveMovieStreamsProgressive(
                         imdbId = imdbId,
                         title = currentItemTitle,
                         year = null
                     )
                 } else {
-                    streamRepository.resolveEpisodeStreams(
+                    streamRepository.resolveEpisodeStreamsProgressive(
                         imdbId = imdbId,
                         season = seasonNumber ?: 1,
                         episode = episodeNumber ?: 1,
                         tmdbId = mediaId,
-                        tvdbId = currentTvdbId,  // Pass tvdbId for anime Kitsu mapping
+                        tvdbId = currentTvdbId,
                         genreIds = currentGenreIds,
                         originalLanguage = currentOriginalLanguage,
                         title = currentItemTitle
                     )
                 }
 
-
-                // Keep exact source order consistent with Details -> Sources tab.
-                val allStreams = result.streams
-                    .filter { stream ->
-                        val u = stream.url?.trim().orEmpty()
-                        u.isNotBlank() &&
-                            !u.startsWith("magnet:", ignoreCase = true)
-                    }
-                val existingVod = _uiState.value.streams.filter { it.addonId == "iptv_xtream_vod" }
-                val mergedStreams = (allStreams + existingVod)
-                    .distinctBy { "${it.url?.trim().orEmpty()}|${it.source}" }
-
-                // Get saved position for resume playback
-                val resumeData = resumeDataDeferred.await()
-
-                // Determine appropriate error message
-                val streamingAddonsCount = if (mergedStreams.isEmpty()) {
-                    streamRepository.installedAddons.first()
-                        .count { it.isEnabled && it.type != com.arflix.tv.data.model.AddonType.SUBTITLE }
-                } else -1
-
-                val errorMessage = if (mergedStreams.isEmpty()) {
-                    if (streamingAddonsCount == 0) {
-                        "No streaming addons configured.\n\nGo to Settings \u2192 Addons to add a streaming addon, then come back and try again."
-                    } else {
-                        "No streams found for this content. The addons may not have sources for this title."
-                    }
-                } else null
-
-                val isSetup = mergedStreams.isEmpty() && streamingAddonsCount == 0
-
-                // Update UI with sorted streams
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    isLoadingStreams = false,
-                    streams = mergedStreams,
-                    subtitles = result.subtitles,
-                    savedPosition = resumeData.positionMs,
-                    error = errorMessage,
-                    isSetupError = isSetup
-                )
-
-                // Auto-select: respect explicit navigation preference, otherwise choose
-                // the most playback-stable stream profile.
-                if (mergedStreams.isNotEmpty()) {
-                    val preferredFromBingeGroup = currentPreferredBingeGroup?.let { preferredGroup ->
-                        mergedStreams.firstOrNull { stream ->
-                            stream.behaviorHints?.bingeGroup == preferredGroup &&
-                                (currentPreferredAddonId?.let { stream.addonId == it } ?: true)
-                        } ?: mergedStreams.firstOrNull { stream ->
-                            stream.behaviorHints?.bingeGroup == preferredGroup
+                progressiveFlow.collect { progressive ->
+                    // Keep exact source order consistent with Details -> Sources tab.
+                    val allStreams = progressive.streams
+                        .filter { stream ->
+                            val u = stream.url?.trim().orEmpty()
+                            u.isNotBlank() && !u.startsWith("magnet:", ignoreCase = true)
                         }
-                    }
+                    val existingVod = _uiState.value.streams.filter { it.addonId == "iptv_xtream_vod" }
+                    val mergedStreams = (allStreams + existingVod)
+                        .distinctBy { "${it.url?.trim().orEmpty()}|${it.source}" }
 
-                    val preferredFromNavigation = mergedStreams.firstOrNull { s ->
-                        val addonMatch = currentPreferredAddonId?.let { s.addonId == it } ?: true
-                        val sourceMatch = currentPreferredSourceName?.let { s.source == it } ?: true
-                        addonMatch && sourceMatch
-                    } ?: mergedStreams.firstOrNull { s ->
-                        currentPreferredAddonId?.let { s.addonId == it } ?: false
-                    }
+                    val errorMessage = if (progressive.isFinal && mergedStreams.isEmpty()) {
+                        if (streamingAddonCount == 0) {
+                            "No streaming addons configured.\n\nGo to Settings \u2192 Addons to add a streaming addon, then come back and try again."
+                        } else {
+                            "No streams found for this content. The addons may not have sources for this title."
+                        }
+                    } else null
 
-                    val preferredLanguage = _uiState.value.preferredAudioLanguage.ifBlank { resolvePreferredAudioLanguage() }
-                    val stabilitySelected = pickPreferredStream(mergedStreams, preferredLanguage)
-                    val selected = preferredFromBingeGroup ?: preferredFromNavigation ?: stabilitySelected ?: mergedStreams.first()
-                    selectStream(selected)
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        isLoadingStreams = !progressive.isFinal && mergedStreams.isEmpty(),
+                        streams = mergedStreams,
+                        subtitles = progressive.subtitles,
+                        error = errorMessage,
+                        isSetupError = progressive.isFinal && mergedStreams.isEmpty() && streamingAddonCount == 0
+                    )
+
+                    if (!firstPlayableSelected && mergedStreams.isNotEmpty()) {
+                        val preferredFromBingeGroup = currentPreferredBingeGroup?.let { preferredGroup ->
+                            mergedStreams.firstOrNull { stream ->
+                                stream.behaviorHints?.bingeGroup == preferredGroup &&
+                                    (currentPreferredAddonId?.let { stream.addonId == it } ?: true)
+                            } ?: mergedStreams.firstOrNull { stream ->
+                                stream.behaviorHints?.bingeGroup == preferredGroup
+                            }
+                        }
+
+                        val preferredFromNavigation = mergedStreams.firstOrNull { s ->
+                            val addonMatch = currentPreferredAddonId?.let { s.addonId == it } ?: true
+                            val sourceMatch = currentPreferredSourceName?.let { s.source == it } ?: true
+                            addonMatch && sourceMatch
+                        } ?: mergedStreams.firstOrNull { s ->
+                            currentPreferredAddonId?.let { s.addonId == it } ?: false
+                        }
+
+                        val stabilitySelected = pickPreferredStream(mergedStreams, preferredLanguage)
+                        val selected = preferredFromBingeGroup ?: preferredFromNavigation ?: stabilitySelected ?: mergedStreams.first()
+                        firstPlayableSelected = true
+                        selectStream(selected)
+                    }
                 }
 
                 // Apply subtitle preference in background (non-blocking)
@@ -441,7 +444,7 @@ class PlayerViewModel @Inject constructor(
                         )
                     }.getOrDefault(emptyList())
 
-                    val mergedSubs = (result.subtitles + fetchedSubs)
+                    val mergedSubs = (_uiState.value.subtitles + fetchedSubs)
                         .filter { it.url.isNotBlank() }
                         .distinctBy { "${it.id}|${it.url}" }
 
@@ -538,11 +541,16 @@ class PlayerViewModel @Inject constructor(
     }
 
     private fun fetchSkipIntervals(imdbId: String, season: Int, episode: Int) {
-        viewModelScope.launch {
+        val requestKey = "$imdbId:$season:$episode"
+        activeSkipRequestKey = requestKey
+        skipIntervalsJob?.cancel()
+        skipIntervalsJob = viewModelScope.launch {
             val intervals = skipIntroRepository.getSkipIntervals(imdbId, season, episode)
+            if (activeSkipRequestKey != requestKey) return@launch
             skipIntervals = intervals
             // Force a recompute on the next position tick.
             lastActiveSkipType = null
+            _uiState.value = _uiState.value.copy(activeSkipInterval = null, skipIntervalDismissed = false)
         }
     }
 
@@ -618,27 +626,30 @@ class PlayerViewModel @Inject constructor(
             ?.let { normalizeLanguage(it) }
             ?.takeIf { it.isNotBlank() && it != normalizedPref }
 
+        fun subtitleTokens(sub: Subtitle): Set<String> {
+            val rawTokens = Regex("[A-Za-z-]+").findAll("${sub.lang} ${sub.label}")
+                .map { it.value }
+                .toList()
+            val normalized = rawTokens.map { normalizeLanguage(it) }.filter { it.isNotBlank() }
+            return buildSet {
+                add(normalizeLanguage(sub.lang))
+                add(normalizeLanguage(sub.label))
+                addAll(normalized)
+            }.filter { it.isNotBlank() }.toSet()
+        }
+
         fun findMatch(target: String): Subtitle? {
             return subtitles.firstOrNull { sub ->
-                val normalizedSubLang = normalizeLanguage(sub.lang)
-                normalizedSubLang == target
+                subtitleTokens(sub).contains(target)
             } ?: subtitles.firstOrNull { sub ->
-                val normalizedSubLabel = normalizeLanguage(sub.label)
-                normalizedSubLabel == target
+                sub.label.lowercase().contains(target) || sub.lang.lowercase().contains(target)
             }
         }
 
-        // Prioritize: 1. Exact match, 2. Contains match, 3. English fallback if preference is English
+        // Prioritize: exact normalized match, language token match, fallback language, then English fallback.
         val match = findMatch(normalizedPref)
-            ?: if (normalizedPref == "en") {
-                // Fallback for English: Try "eng", "en", "English"
-                subtitles.firstOrNull { sub ->
-                    sub.lang.equals("en", ignoreCase = true) ||
-                        sub.lang.equals("eng", ignoreCase = true) ||
-                        sub.label.contains("English", ignoreCase = true)
-                }
-            } else null
             ?: normalizedFallback?.let { findMatch(it) }
+            ?: if (normalizedPref != "en") findMatch("en") else null
 
         if (match != null) {
             _uiState.value = _uiState.value.copy(selectedSubtitle = match)
@@ -1014,28 +1025,9 @@ class PlayerViewModel @Inject constructor(
                 return@launch
             }
 
-            if (url.startsWith("http://", ignoreCase = true) || url.startsWith("https://", ignoreCase = true)) {
-                // Skip reachability check for debrid CDN URLs - they are freshly resolved,
-                // time-limited, and the HEAD request wastes time / can consume single-use URLs.
-                if (!isKnownDebridCdnUrl(url)) {
-                    val reachableSelection = findFirstReachableStreamInAddon(stream)
-                    if (reachableSelection == null) {
-                        _uiState.value = _uiState.value.copy(
-                            error = "Source is unreachable right now. Try again or pick another source."
-                        )
-                        return@launch
-                    }
-                    selectedOriginal = reachableSelection.original
-                    resolvedStream = reachableSelection.resolved
-                    url = resolvedStream.url
-                    if (url.isNullOrBlank()) {
-                        _uiState.value = _uiState.value.copy(
-                            error = "Failed to resolve source URL."
-                        )
-                        return@launch
-                    }
-                }
-            }
+            // Start playback immediately with the resolved URL.
+            // Probing alternate HTTP candidates before first play adds large latency and
+            // is now avoided; player failover handles truly bad sources after startup.
 
             // Find the index of this stream
             val streams = _uiState.value.streams
@@ -1496,23 +1488,28 @@ class PlayerViewModel @Inject constructor(
                     streamTitle = streamTitle
                 )
 
-                // Also save to local Continue Watching (profile-scoped, for profiles without Trakt)
-                traktRepository.saveLocalContinueWatching(
-                    mediaType = currentMediaType,
-                    tmdbId = currentMediaId,
-                    title = currentItemTitle.ifEmpty { currentTitle },
-                    posterPath = currentPoster,
-                    backdropPath = currentBackdrop,
-                    season = currentSeason,
-                    episode = currentEpisode,
-                    episodeTitle = currentEpisodeTitle,
-                    progress = progressPercent,
-                    positionSeconds = positionSeconds,
-                    durationSeconds = durationSeconds,
-                    streamKey = streamKey,
-                    streamAddonId = streamAddonId,
-                    streamTitle = streamTitle
-                )
+                // Also save to local Continue Watching (profile-scoped, for profiles without Trakt).
+                // Skip when at watched threshold — the watched-mark block below will handle
+                // creating the next-episode CW entry instead, avoiding a stale position/duration
+                // from the finished episode leaking into the next-episode's resume label.
+                if (progressPercent < Constants.WATCHED_THRESHOLD) {
+                    traktRepository.saveLocalContinueWatching(
+                        mediaType = currentMediaType,
+                        tmdbId = currentMediaId,
+                        title = currentItemTitle.ifEmpty { currentTitle },
+                        posterPath = currentPoster,
+                        backdropPath = currentBackdrop,
+                        season = currentSeason,
+                        episode = currentEpisode,
+                        episodeTitle = currentEpisodeTitle,
+                        progress = progressPercent,
+                        positionSeconds = positionSeconds,
+                        durationSeconds = durationSeconds,
+                        streamKey = streamKey,
+                        streamAddonId = streamAddonId,
+                        streamTitle = streamTitle
+                    )
+                }
 
                 if (!isPlaying || playbackState == Player.STATE_ENDED || progressPercent >= Constants.WATCHED_THRESHOLD) {
                     runCatching { cloudSyncRepository.pushToCloud() }
@@ -1535,8 +1532,10 @@ class PlayerViewModel @Inject constructor(
                     // Scrobble stop failed
                 }
                 try {
-                    if (currentMediaType == MediaType.TV && currentSeason != null && currentEpisode != null) {
-                        traktRepository.deletePlaybackForEpisode(currentMediaId, currentSeason!!, currentEpisode!!)
+                    val safeSeason = currentSeason
+                val safeEpisode = currentEpisode
+                if (currentMediaType == MediaType.TV && safeSeason != null && safeEpisode != null) {
+                        traktRepository.deletePlaybackForEpisode(currentMediaId, safeSeason, safeEpisode)
                     } else if (currentMediaType == MediaType.MOVIE) {
                         traktRepository.deletePlaybackForContent(currentMediaId, currentMediaType)
                     }
@@ -1549,21 +1548,23 @@ class PlayerViewModel @Inject constructor(
                 // Without this, the next episode only appears in CW after 60s of
                 // playback (the hasMeaningfulPosition threshold), leaving a gap where
                 // CW shows nothing for non-Trakt profiles.
-                if (currentMediaType == MediaType.TV && currentSeason != null && currentEpisode != null) {
+                val cwSeason = currentSeason
+                val cwEpisode = currentEpisode
+                if (currentMediaType == MediaType.TV && cwSeason != null && cwEpisode != null) {
                     try {
-                        val nextEpisode = currentEpisode!! + 1
+                        val nextEpisode = cwEpisode + 1
                         traktRepository.saveLocalContinueWatching(
                             mediaType = currentMediaType,
                             tmdbId = currentMediaId,
                             title = currentItemTitle.ifEmpty { currentTitle },
                             posterPath = currentPoster,
                             backdropPath = currentBackdrop,
-                            season = currentSeason,
+                            season = cwSeason,
                             episode = nextEpisode,
                             episodeTitle = null,
                             progress = 3, // meets MIN_PROGRESS_THRESHOLD to avoid filter
-                            positionSeconds = 1L, // meets hasMeaningfulPosition threshold
-                            durationSeconds = (duration / 1000L).coerceAtLeast(1L)
+                            positionSeconds = 0L, // next episode: no resume position yet
+                            durationSeconds = 0L  // next episode: unknown duration
                         )
                     } catch (_: Exception) {
                         // Best-effort: don't let CW save failure affect playback
