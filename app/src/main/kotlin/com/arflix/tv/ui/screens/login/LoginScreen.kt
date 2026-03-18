@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -34,6 +35,7 @@ import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.arflix.tv.R
 import com.arflix.tv.data.repository.AuthState
 import com.arflix.tv.ui.components.*
 import com.arflix.tv.ui.theme.*
@@ -184,7 +186,7 @@ fun LoginScreen(
                 Spacer(modifier = Modifier.height(18.dp))
 
                 Text(
-                    text = "Your library, tuned for TV.",
+                    text = stringResource(R.string.login_tagline),
                     fontSize = 20.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = Color.White.copy(alpha = 0.85f)
@@ -193,7 +195,7 @@ fun LoginScreen(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Text(
-                    text = "Keep your watchlist, history, and Trakt sync tied to your account.",
+                    text = stringResource(R.string.login_description),
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Normal,
                     color = Color.White.copy(alpha = 0.6f),
@@ -215,7 +217,7 @@ fun LoginScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = if (isSignUpMode) "Create your account" else "Sign in to continue",
+                    text = if (isSignUpMode) stringResource(R.string.create_your_account) else stringResource(R.string.sign_in_to_continue),
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Medium,
                     color = Color.White.copy(alpha = 0.8f)
@@ -245,7 +247,7 @@ fun LoginScreen(
                 PremiumTextField(
                     value = email,
                     onValueChange = { email = it },
-                    placeholder = "Email",
+                    placeholder = stringResource(R.string.email_label),
                     keyboardType = KeyboardType.Email,
                     imeAction = ImeAction.Next,
                     keyboardActions = KeyboardActions(
@@ -269,7 +271,7 @@ fun LoginScreen(
                 PremiumTextField(
                     value = password,
                     onValueChange = { password = it },
-                    placeholder = "Password",
+                    placeholder = stringResource(R.string.password_label),
                     keyboardType = KeyboardType.Password,
                     isPassword = true,
                     imeAction = ImeAction.Done,
@@ -302,7 +304,7 @@ fun LoginScreen(
                             viewModel.signIn(email, password)
                         }
                     },
-                    text = if (isSignUpMode) "Sign Up" else "Sign In",
+                    text = if (isSignUpMode) stringResource(R.string.sign_up_button) else stringResource(R.string.sign_in_button),
                     isPrimary = true,
                     isFocused = focusedField == "button",
                     enabled = !uiState.isLoading,
@@ -317,7 +319,7 @@ fun LoginScreen(
                 // Toggle Sign In / Sign Up
                 GradientButton(
                     onClick = { isSignUpMode = !isSignUpMode },
-                    text = if (isSignUpMode) "Already have an account? Sign In" else "Don't have an account? Sign Up",
+                    text = if (isSignUpMode) stringResource(R.string.back_to_sign_in) else stringResource(R.string.create_account_link),
                     isPrimary = false,
                     isFocused = focusedField == "toggle",
                     enabled = !uiState.isLoading,

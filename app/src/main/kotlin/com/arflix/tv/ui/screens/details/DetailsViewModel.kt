@@ -3,6 +3,7 @@ package com.arflix.tv.ui.screens.details
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.arflix.tv.R
 import com.arflix.tv.data.model.CastMember
 import com.arflix.tv.data.model.Episode
 import com.arflix.tv.data.model.MediaItem
@@ -690,14 +691,14 @@ class DetailsViewModel @Inject constructor(
                 } else {
                     // If no episodes returned, keep current and show error
                     _uiState.value = _uiState.value.copy(
-                        toastMessage = "No episodes found for Season $seasonNumber",
+                        toastMessage = context.getString(R.string.no_episodes_found_season, seasonNumber),
                         toastType = ToastType.ERROR
                     )
                 }
             } catch (e: Exception) {
                 // On error, keep showing current episodes
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = "Failed to load Season $seasonNumber",
+                    toastMessage = context.getString(R.string.load_season_failed, seasonNumber),
                     toastType = ToastType.ERROR
                 )
             }
@@ -726,7 +727,7 @@ class DetailsViewModel @Inject constructor(
                     val targetEpisode = _uiState.value.episodes.getOrNull(episodeIndex ?: 0)
                     if (targetEpisode == null) {
                         _uiState.value = _uiState.value.copy(
-                            toastMessage = "No episode selected",
+                            toastMessage = context.getString(R.string.no_episode_selected),
                             toastType = ToastType.ERROR
                         )
                         return@launch
@@ -799,9 +800,9 @@ class DetailsViewModel @Inject constructor(
                         item = currentItem.copy(isWatched = anyWatched),
                         episodes = updatedEpisodes,
                         toastMessage = if (episodeWatched) {
-                            "S${targetEpisode.seasonNumber}E${targetEpisode.episodeNumber} marked as watched"
+                            context.getString(R.string.episode_marked_as_watched, targetEpisode.seasonNumber, targetEpisode.episodeNumber)
                         } else {
-                            "S${targetEpisode.seasonNumber}E${targetEpisode.episodeNumber} marked as unwatched"
+                            context.getString(R.string.episode_marked_as_unwatched, targetEpisode.seasonNumber, targetEpisode.episodeNumber)
                         },
                         toastType = ToastType.SUCCESS
                     )
@@ -809,7 +810,7 @@ class DetailsViewModel @Inject constructor(
                 }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = "Failed to update watched status",
+                    toastMessage = context.getString(R.string.watched_update_failed),
                     toastType = ToastType.ERROR
                 )
             }
@@ -832,12 +833,12 @@ class DetailsViewModel @Inject constructor(
 
                 _uiState.value = _uiState.value.copy(
                     isInWatchlist = newInWatchlist,
-                    toastMessage = if (newInWatchlist) "Added to watchlist" else "Removed from watchlist",
+                    toastMessage = if (newInWatchlist) context.getString(R.string.added_to_watchlist) else context.getString(R.string.removed_from_watchlist),
                     toastType = ToastType.SUCCESS
                 )
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = "Failed to update watchlist",
+                    toastMessage = context.getString(R.string.watchlist_update_failed),
                     toastType = ToastType.ERROR
                 )
             }
@@ -1222,7 +1223,7 @@ class DetailsViewModel @Inject constructor(
 
                 if (seasonEpisodes.isEmpty()) {
                     _uiState.value = _uiState.value.copy(
-                        toastMessage = "No episodes found for Season $season",
+                        toastMessage = context.getString(R.string.no_episodes_found_season, season),
                         toastType = ToastType.ERROR
                     )
                     return@launch
@@ -1297,13 +1298,13 @@ class DetailsViewModel @Inject constructor(
                     playEpisode = playTarget?.episode ?: _uiState.value.playEpisode,
                     playLabel = playTarget?.label ?: _uiState.value.playLabel,
                     playPositionMs = playTarget?.positionMs ?: _uiState.value.playPositionMs,
-                    toastMessage = "Season $season marked as watched",
+                    toastMessage = context.getString(R.string.season_marked_as_watched, season),
                     toastType = ToastType.SUCCESS
                 )
                 runCatching { launcherContinueWatchingRepository.refreshForCurrentProfile() }
             } catch (_: Exception) {
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = "Failed to mark season as watched",
+                    toastMessage = context.getString(R.string.mark_season_watched_failed),
                     toastType = ToastType.ERROR
                 )
             }

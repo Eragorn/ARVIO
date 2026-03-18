@@ -50,6 +50,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -58,6 +59,7 @@ import androidx.tv.foundation.lazy.list.itemsIndexed
 import androidx.tv.foundation.lazy.list.rememberTvLazyListState
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.arflix.tv.R
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.ui.components.LoadingIndicator
@@ -326,7 +328,7 @@ fun SearchScreen(
                             onValueChange = { viewModel.updateQuery(it) },
                             placeholder = {
                                 Text(
-                                    text = "Search movies and TV shows...",
+                                    text = stringResource(R.string.search_hint),
                                     style = ArflixTypography.body,
                                     color = TextSecondary
                                 )
@@ -407,7 +409,7 @@ fun SearchScreen(
                                 decorationBox = { innerTextField ->
                                     if (uiState.query.isEmpty()) {
                                         Text(
-                                            text = "Search movies and TV shows...",
+                                            text = stringResource(R.string.search_hint),
                                             style = ArflixTypography.body,
                                             color = TextSecondary
                                         )
@@ -433,7 +435,7 @@ fun SearchScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "No results found for \"${uiState.query}\"",
+                            text = stringResource(R.string.no_results_for, uiState.query),
                             style = ArflixTypography.body,
                             color = TextSecondary
                         )
@@ -442,7 +444,7 @@ fun SearchScreen(
                     // Movies Row
                     if (uiState.movieResults.isNotEmpty()) {
                         SearchResultRow(
-                            title = "Movies",
+                            title = stringResource(R.string.movies_title),
                             items = uiState.movieResults,
                             cardLogoUrls = uiState.cardLogoUrls,
                             usePosterCards = usePosterCards,
@@ -458,7 +460,7 @@ fun SearchScreen(
                     // TV Shows Row
                     if (uiState.tvResults.isNotEmpty()) {
                         SearchResultRow(
-                            title = "TV Shows",
+                            title = stringResource(R.string.tv_shows_title),
                             items = uiState.tvResults,
                             cardLogoUrls = uiState.cardLogoUrls,
                             usePosterCards = usePosterCards,
@@ -562,11 +564,13 @@ private fun SearchResultRow(
                     ) { index ->
                         val item = items[index]
                         val yearValue = item.year.ifBlank { item.releaseDate?.take(4).orEmpty() }
+                        val tvShowStr = stringResource(R.string.tv_series)
+                        val movieStr = stringResource(R.string.movie)
                         val displayItem = item.copy(
                             subtitle = yearValue.ifBlank {
                                 when (item.mediaType) {
-                                    MediaType.TV -> "TV Show"
-                                    MediaType.MOVIE -> "Movie"
+                                    MediaType.TV -> tvShowStr
+                                    MediaType.MOVIE -> movieStr
                                 }
                             }
                         )
@@ -604,11 +608,13 @@ private fun SearchResultRow(
                 ) {
                     itemsIndexed(items, key = { _, it -> it.id }) { index, item ->
                         val yearValue = item.year.ifBlank { item.releaseDate?.take(4).orEmpty() }
-                        val displayItem = item.copy(
+                        val tvShowStr = stringResource(R.string.tv_series)
+                    val movieStr = stringResource(R.string.movie)
+                    val displayItem = item.copy(
                             subtitle = yearValue.ifBlank {
                                 when (item.mediaType) {
-                                    MediaType.TV -> "TV Show"
-                                    MediaType.MOVIE -> "Movie"
+                                    MediaType.TV -> tvShowStr
+                                    MediaType.MOVIE -> movieStr
                                 }
                             }
                         )

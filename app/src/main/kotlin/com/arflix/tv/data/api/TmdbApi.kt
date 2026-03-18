@@ -14,102 +14,116 @@ interface TmdbApi {
     @GET("trending/movie/day")
     suspend fun getTrendingMovies(
         @Query("api_key") apiKey: String,
-        @Query("page") page: Int = 1
+        @Query("page") page: Int = 1,
+        @Query("language") language: String? = null
     ): TmdbListResponse
 
     // Daily trending - updates every day for fresher content
     @GET("trending/tv/day")
     suspend fun getTrendingTv(
         @Query("api_key") apiKey: String,
-        @Query("page") page: Int = 1
+        @Query("page") page: Int = 1,
+        @Query("language") language: String? = null
     ): TmdbListResponse
     
     @GET("discover/tv")
     suspend fun discoverTv(
         @Query("api_key") apiKey: String,
         @Query("with_watch_providers") watchProviders: Int? = null,
-        @Query("watch_region") watchRegion: String = "US",
+        @Query("watch_region") watchRegion: String? = null,
         @Query("sort_by") sortBy: String = "popularity.desc",
         @Query("with_genres") genres: String? = null,
-        @Query("with_original_language") language: String? = null,
+        @Query("with_original_language") languageOrigin: String? = null,
         @Query("first_air_date_year") year: Int? = null,
         @Query("vote_count.gte") minVoteCount: Int? = null,
         @Query("with_keywords") keywords: String? = null,
         @Query("air_date.gte") airDateGte: String? = null,
         @Query("air_date.lte") airDateLte: String? = null,
-        @Query("page") page: Int = 1
+        @Query("page") page: Int = 1,
+        @Query("language") language: String? = null
     ): TmdbListResponse
 
     @GET("discover/movie")
     suspend fun discoverMovies(
         @Query("api_key") apiKey: String,
-        @Query("with_genres") genres: String? = null,
+        @Query("with_watch_providers") watchProviders: Int? = null,
+        @Query("watch_region") watchRegion: String? = null,
         @Query("sort_by") sortBy: String = "popularity.desc",
         @Query("vote_count.gte") minVoteCount: Int? = null,
         @Query("with_keywords") keywords: String? = null,
         @Query("release_date.gte") releaseDateGte: String? = null,
         @Query("release_date.lte") releaseDateLte: String? = null,
-        @Query("page") page: Int = 1
+        @Query("page") page: Int = 1,
+        @Query("language") language: String? = null
     ): TmdbListResponse
     
     @GET("movie/{movie_id}")
     suspend fun getMovieDetails(
         @Path("movie_id") movieId: Int,
-        @Query("api_key") apiKey: String
+        @Query("api_key") apiKey: String,
+        @Query("language") language: String? = null
     ): TmdbMovieDetails
     
     @GET("tv/{tv_id}")
     suspend fun getTvDetails(
         @Path("tv_id") tvId: Int,
-        @Query("api_key") apiKey: String
+        @Query("api_key") apiKey: String,
+        @Query("language") language: String? = null
     ): TmdbTvDetails
     
     @GET("tv/{tv_id}/season/{season_number}")
     suspend fun getTvSeason(
         @Path("tv_id") tvId: Int,
         @Path("season_number") seasonNumber: Int,
-        @Query("api_key") apiKey: String
+        @Query("api_key") apiKey: String,
+        @Query("language") language: String? = null
     ): TmdbSeasonDetails
     
     @GET("{media_type}/{id}/credits")
     suspend fun getCredits(
         @Path("media_type") mediaType: String,
         @Path("id") id: Int,
-        @Query("api_key") apiKey: String
+        @Query("api_key") apiKey: String,
+        @Query("language") language: String? = null
     ): TmdbCreditsResponse
     
     @GET("{media_type}/{id}/similar")
     suspend fun getSimilar(
         @Path("media_type") mediaType: String,
         @Path("id") id: Int,
-        @Query("api_key") apiKey: String
+        @Query("api_key") apiKey: String,
+        @Query("language") language: String? = null
     ): TmdbListResponse
 
     @GET("{media_type}/{id}/recommendations")
     suspend fun getRecommendations(
         @Path("media_type") mediaType: String,
         @Path("id") id: Int,
-        @Query("api_key") apiKey: String
+        @Query("api_key") apiKey: String,
+        @Query("language") language: String? = null
     ): TmdbListResponse
 
     @GET("{media_type}/{id}/images")
     suspend fun getImages(
         @Path("media_type") mediaType: String,
         @Path("id") id: Int,
-        @Query("api_key") apiKey: String
+        @Query("api_key") apiKey: String,
+        @Query("include_image_language") includeImageLanguage: String = "en,null"
     ): TmdbImagesResponse
     
     @GET("{media_type}/{id}/videos")
     suspend fun getVideos(
         @Path("media_type") mediaType: String,
         @Path("id") id: Int,
-        @Query("api_key") apiKey: String
+        @Query("api_key") apiKey: String,
+        @Query("language") language: String? = null
     ): TmdbVideosResponse
     
     @GET("person/{person_id}")
     suspend fun getPersonDetails(
         @Path("person_id") personId: Int,
         @Query("api_key") apiKey: String,
+        @Query("language") language: String? = null,
         @Query("append_to_response") appendToResponse: String = "combined_credits"
     ): TmdbPersonDetails
 
@@ -142,21 +156,24 @@ interface TmdbApi {
     suspend fun searchMulti(
         @Query("api_key") apiKey: String,
         @Query("query") query: String,
-        @Query("page") page: Int = 1
+        @Query("page") page: Int = 1,
+        @Query("language") language: String? = null
     ): TmdbListResponse
 
     @GET("find/{external_id}")
     suspend fun findByExternalId(
         @Path("external_id") externalId: String,
         @Query("api_key") apiKey: String,
-        @Query("external_source") externalSource: String = "imdb_id"
+        @Query("external_source") externalSource: String = "imdb_id",
+        @Query("language") language: String? = null
     ): TmdbFindResponse
 
     @GET("{media_type}/{id}/reviews")
     suspend fun getReviews(
         @Path("media_type") mediaType: String,
         @Path("id") id: Int,
-        @Query("api_key") apiKey: String
+        @Query("api_key") apiKey: String,
+        @Query("language") language: String? = null
     ): TmdbReviewsResponse
 }
 

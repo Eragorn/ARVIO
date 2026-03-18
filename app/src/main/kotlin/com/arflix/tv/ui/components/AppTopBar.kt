@@ -28,6 +28,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -182,14 +183,15 @@ private fun TopBarNavChip(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        val label = stringResource(item.labelResId)
         Icon(
             imageVector = item.icon,
-            contentDescription = item.label,
+            contentDescription = label,
             tint = iconColor,
             modifier = Modifier.size(18.dp)
         )
         Text(
-            text = item.label,
+            text = label,
             fontSize = 14.sp,
             fontWeight = if (isFocused || isSelected) FontWeight.SemiBold else FontWeight.Medium,
             color = textColor,

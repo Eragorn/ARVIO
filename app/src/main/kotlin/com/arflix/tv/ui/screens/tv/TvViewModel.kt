@@ -1,13 +1,16 @@
 ﻿package com.arflix.tv.ui.screens.tv
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.arflix.tv.R
 import com.arflix.tv.data.model.IptvChannel
 import com.arflix.tv.data.model.IptvSnapshot
 import com.arflix.tv.data.repository.CloudSyncRepository
 import com.arflix.tv.data.repository.IptvConfig
 import com.arflix.tv.data.repository.IptvRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,9 +22,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
-private const val FAVORITES_GROUP_NAME = "My Favorites"
-
 data class TvUiState(
+    @ApplicationContext private val context: Context,
     val isLoading: Boolean = false,
     val error: String? = null,
     val loadingMessage: String? = null,
@@ -32,10 +34,12 @@ data class TvUiState(
     val favoritesOnly: Boolean = false,
     val query: String = ""
 ) {
+    private val FAVORITES_GROUP_NAME: String get() = context.getString(R.string.my_favorites_group)
+
     val isConfigured: Boolean get() = config.m3uUrl.isNotBlank()
 
     fun filteredChannels(group: String): List<IptvChannel> {
-        val source = if (group == FAVORITES_GROUP_NAME) {
+        val source = if (isFavoritesGroup(group)) {
             val favorites = snapshot.favoriteChannels.toHashSet()
             if (favorites.isEmpty()) emptyList() else snapshot.channels.filter { favorites.contains(it.id) }
         } else {
@@ -75,15 +79,18 @@ data class TvUiState(
             ordered
         }
     }
+
+    fun isFavoritesGroup(group: String): Boolean = group == FAVORITES_GROUP_NAME || group == "My Favorites"
 }
 
 @HiltViewModel
 class TvViewModel @Inject constructor(
     private val iptvRepository: IptvRepository,
-    private val cloudSyncRepository: CloudSyncRepository
+    private val cloudSyncRepository: CloudSyncRepository,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(TvUiState(isLoading = true))
+    private val _uiState = MutableStateFlow(TvUiState(context, isLoading = true))
     val uiState: StateFlow<TvUiState> = _uiState.asStateFlow()
     private var refreshJob: Job? = null
     private var epgRefreshJob: Job? = null
@@ -165,7 +172,7 @@ class TvViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(
                     isLoading = true,
                     error = null,
-                    loadingMessage = "Starting IPTV load...",
+                    loadingMessage = context.getString(R.string.iptv_starting_load),
                     loadingPercent = 2
                 )
             }
@@ -205,7 +212,7 @@ class TvViewModel @Inject constructor(
             }.onFailure { error ->
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    error = error.message ?: "Failed to load IPTV",
+                    error = error.message ?: context.getString(R.string.iptv_failed_to_load),
                     loadingMessage = null,
                     loadingPercent = 0
                 )
@@ -239,7 +246,7 @@ class TvViewModel @Inject constructor(
 
         epgRefreshJob = viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
-                loadingMessage = "Loading EPG in background...",
+                loadingMessage = context.getString(R.string.iptv_loading_epg_background),
                 loadingPercent = 90
             )
             runCatching {

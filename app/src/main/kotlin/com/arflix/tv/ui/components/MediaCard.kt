@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -37,6 +38,7 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import coil.size.Precision
+import com.arflix.tv.R
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.ui.skin.ArvioFocusableSurface
@@ -261,12 +263,15 @@ fun MediaCard(
         )
 
         // Arctic Fuse 2 style: Show media type with genre-like format
-        val subtitle = remember(item.subtitle, item.mediaType) {
+        val dramaTv = stringResource(R.string.media_type_drama_tv)
+        val actionMovie = stringResource(R.string.media_type_action_movie)
+        val mediaDefault = stringResource(R.string.media)
+        val subtitle = remember(item.subtitle, item.mediaType, dramaTv, actionMovie, mediaDefault) {
             item.subtitle.ifBlank {
                 when (item.mediaType) {
-                    MediaType.TV -> "Drama / TV Series"
-                    MediaType.MOVIE -> "Action / Movie"
-                    else -> "Media"
+                    MediaType.TV -> dramaTv
+                    MediaType.MOVIE -> actionMovie
+                    else -> mediaDefault
                 }
             }
         }

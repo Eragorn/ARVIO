@@ -6,6 +6,9 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.os.LocaleListCompat
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
@@ -86,10 +89,13 @@ import com.arflix.tv.ui.theme.ArflixTvTheme
 import com.arflix.tv.ui.theme.BackgroundGradientCenter
 import com.arflix.tv.ui.theme.BackgroundGradientEnd
 import com.arflix.tv.ui.theme.BackgroundGradientStart
+import com.arflix.tv.util.settingsDataStore
 import com.arflix.tv.worker.TraktSyncWorker
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.Lazy
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
 import kotlin.math.PI
 import kotlin.math.cos
@@ -100,7 +106,7 @@ import kotlin.math.sin
  * Uses Android 12+ Splash Screen API for instant launch feedback
  */
 @AndroidEntryPoint
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
 
     @Inject
     lateinit var authRepository: Lazy<AuthRepository>
@@ -121,6 +127,14 @@ class MainActivity : ComponentActivity() {
     private val startupViewModel: StartupViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Apply saved locale before super.onCreate()
+        val prefs = runBlocking { settingsDataStore.data.first() }
+        val savedLanguage = prefs[androidx.datastore.preferences.core.stringPreferencesKey("app_language")]
+        if (savedLanguage != null) {
+            val appLocale = LocaleListCompat.forLanguageTags(savedLanguage)
+            AppCompatDelegate.setApplicationLocales(appLocale)
+        }
+
         // Install splash screen BEFORE super.onCreate()
         // Don't use setKeepOnScreenCondition - it causes black screen on some TV devices
         // Instead, let the splash dismiss immediately and show our Compose loading screen
@@ -128,6 +142,10 @@ class MainActivity : ComponentActivity() {
 
         super.onCreate(savedInstanceState)
         pendingLauncherRequest = parseLauncherRequest(intent)
+        
+        // Ensure locales are applied as early as possible
+        // (AppCompatDelegate handles this automatically if setApplicationLocales was called before,
+        // but it doesn't hurt to have it here if needed).
 
         // Set orientation based on device type
         val deviceType = detectDeviceType(this)

@@ -60,6 +60,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import androidx.compose.ui.res.stringResource
+import com.arflix.tv.R
 import com.arflix.tv.ui.theme.ArflixTypography
 import com.arflix.tv.ui.theme.BackgroundElevated
 import com.arflix.tv.ui.theme.Pink
@@ -288,7 +290,7 @@ fun TextInputModal(
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     ActionButton(
-                        text = "CANCEL",
+                        text = stringResource(R.string.cancel),
                         isFocused = focusedButton == 0,
                         onClick = {
                             hideKeyboard()
@@ -296,7 +298,7 @@ fun TextInputModal(
                         }
                     )
                     ActionButton(
-                        text = "OK",
+                        text = stringResource(R.string.button_ok),
                         isFocused = focusedButton == 1,
                         isPrimary = true,
                         onClick = {

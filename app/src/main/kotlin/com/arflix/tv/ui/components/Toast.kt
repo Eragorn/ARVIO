@@ -86,7 +86,7 @@ fun Toast(
                     Icons.Default.Close
                 )
                 ToastType.INFO -> Triple(
-                    Pink.copy(alpha = 0.9f),
+                    Color(0xFF3B82F6).copy(alpha = 0.9f),
                     Color.White,
                     Icons.Default.Info
                 )
@@ -110,7 +110,7 @@ fun Toast(
                 Text(
                     text = message,
                     style = ArflixTypography.body,
-                    color = TextPrimary
+                    color = Color.Black
                 )
             }
         }

@@ -51,10 +51,12 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.arflix.tv.R
 import com.arflix.tv.ui.theme.ArflixTypography
 import com.arflix.tv.ui.theme.BackgroundElevated
 import com.arflix.tv.ui.theme.Pink
@@ -67,7 +69,7 @@ import com.arflix.tv.util.LocalDeviceType
  */
 data class ContextAction(
     val id: String,
-    val label: String,
+    val labelResId: Int,
     val icon: ImageVector,
     val color: Color = TextPrimary
 )
@@ -76,14 +78,14 @@ data class ContextAction(
  * Predefined context actions
  */
 object ContextActions {
-    val play = ContextAction("play", "Play", Icons.Default.PlayArrow, Pink)
-    val selectSource = ContextAction("sources", "Select Source", Icons.Default.Info, TextPrimary)
-    val markWatched = ContextAction("mark_watched", "Mark as Watched", Icons.Default.Visibility, Color(0xFF22C55E))
-    val markUnwatched = ContextAction("mark_unwatched", "Mark as Unwatched", Icons.Default.VisibilityOff, TextSecondary)
-    val addWatchlist = ContextAction("add_watchlist", "Add to Watchlist", Icons.Default.BookmarkBorder, Pink)
-    val removeWatchlist = ContextAction("remove_watchlist", "Remove from Watchlist", Icons.Default.Bookmark, TextSecondary)
-    val viewDetails = ContextAction("view_details", "View Details", Icons.Default.Info, TextPrimary)
-    val markSeasonWatched = ContextAction("mark_season_watched", "Mark Season Watched", Icons.Default.Check, Color(0xFF22C55E))
+    val play = ContextAction("play", R.string.play, Icons.Default.PlayArrow, Pink)
+    val selectSource = ContextAction("sources", R.string.select_source, Icons.Default.Info, TextPrimary)
+    val markWatched = ContextAction("mark_watched", R.string.mark_as_watched, Icons.Default.Visibility, Color(0xFF22C55E))
+    val markUnwatched = ContextAction("mark_unwatched", R.string.mark_as_unwatched, Icons.Default.VisibilityOff, TextSecondary)
+    val addWatchlist = ContextAction("add_watchlist", R.string.add_to_watchlist, Icons.Default.BookmarkBorder, Pink)
+    val removeWatchlist = ContextAction("remove_watchlist", R.string.remove_from_watchlist, Icons.Default.Bookmark, TextSecondary)
+    val viewDetails = ContextAction("view_details", R.string.view_details, Icons.Default.Info, TextPrimary)
+    val markSeasonWatched = ContextAction("mark_season_watched", R.string.mark_as_watched, Icons.Default.Check, Color(0xFF22C55E))
 }
 
 /**
@@ -167,7 +169,7 @@ fun ContextMenu(
                         style = ArflixTypography.sectionTitle,
                         color = TextPrimary
                     )
-                    
+
                     // Subtitle
                     if (subtitle != null) {
                         Spacer(modifier = Modifier.height(8.dp))
@@ -177,9 +179,9 @@ fun ContextMenu(
                             color = TextSecondary
                         )
                     }
-                    
+
                     Spacer(modifier = Modifier.height(16.dp))
-                    
+
                     // Divider
                     Box(
                         modifier = Modifier
@@ -187,9 +189,9 @@ fun ContextMenu(
                             .height(1.dp)
                             .background(Color.White.copy(alpha = 0.1f))
                     )
-                    
+
                     Spacer(modifier = Modifier.height(12.dp))
-                    
+
                     // Actions
                     Column(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -201,9 +203,9 @@ fun ContextMenu(
                             )
                         }
                     }
-                    
+
                     Spacer(modifier = Modifier.height(14.dp))
-                    
+
                     // Close hint
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -219,7 +221,7 @@ fun ContextMenu(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Press Back to cancel",
+                            text = stringResource(R.string.press_back_cancel),
                             style = ArflixTypography.caption,
                             color = TextSecondary
                         )
@@ -383,7 +385,7 @@ private fun ContextMenuItem(
         Spacer(modifier = Modifier.width(16.dp))
         
         Text(
-            text = action.label,
+            text = stringResource(action.labelResId),
             style = ArflixTypography.body,
             color = if (isFocused) TextPrimary else action.color
         )
@@ -454,8 +456,8 @@ fun SeasonContextMenu(
 ) {
     ContextMenu(
         isVisible = isVisible,
-        title = "Season $seasonNumber",
-        subtitle = "Quick Actions",
+        title = stringResource(R.string.season, seasonNumber),
+        subtitle = stringResource(R.string.quick_actions),
         actions = listOf(ContextActions.markSeasonWatched),
         onAction = { action ->
             if (action.id == "mark_season_watched") {

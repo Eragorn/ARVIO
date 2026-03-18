@@ -101,6 +101,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.res.stringResource
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
@@ -145,6 +146,7 @@ import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import com.arflix.tv.R
 import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
@@ -632,13 +634,13 @@ fun HomeScreen(
                     verticalArrangement = Arrangement.Center
                 ) {
                     Text(
-                        text = "Unable to load content",
+                        text = stringResource(R.string.home_error_loading),
                         style = ArflixTypography.sectionTitle,
                         color = TextPrimary
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = uiState.error ?: "Please check your connection",
+                        text = uiState.error ?: stringResource(R.string.home_error_check_connection),
                         style = ArflixTypography.body,
                         color = TextSecondary
                     )
@@ -646,7 +648,7 @@ fun HomeScreen(
                     androidx.tv.material3.Button(
                         onClick = { viewModel.refresh() }
                     ) {
-                        Text("Retry")
+                        Text(stringResource(R.string.button_retry))
                     }
                 }
             }

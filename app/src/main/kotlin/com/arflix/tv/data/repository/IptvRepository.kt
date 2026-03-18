@@ -6,6 +6,7 @@ import android.security.keystore.KeyProperties
 import android.util.Base64
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import com.arflix.tv.R
 import com.arflix.tv.data.model.IptvChannel
 import com.arflix.tv.data.model.IptvNowNext
 import com.arflix.tv.data.model.IptvProgram
@@ -520,7 +521,7 @@ class IptvRepository @Inject constructor(
         return withContext(Dispatchers.IO) {
             loadMutex.withLock {
             cleanupStaleEpgTempFiles()
-            onProgress(IptvLoadProgress("Starting IPTV load...", 2))
+            onProgress(IptvLoadProgress(context.getString(R.string.iptv_starting_load), 2))
             val now = System.currentTimeMillis()
             val config = observeConfig().first()
             val profileId = profileManager.getProfileIdSync()
@@ -550,9 +551,9 @@ class IptvRepository @Inject constructor(
                 onProgress(
                     IptvLoadProgress(
                         if (isFresh) {
-                            "Using cached playlist (${cachedChannels.size} channels)"
+                            context.getString(R.string.iptv_using_cached_playlist, cachedChannels.size)
                         } else {
-                            "Using cached playlist (${cachedChannels.size} channels, stale)"
+                            context.getString(R.string.iptv_using_cached_playlist_stale, cachedChannels.size)
                         },
                         80
                     )
@@ -580,11 +581,11 @@ class IptvRepository @Inject constructor(
             val hasXtreamChannels = channels.any { it.xtreamStreamId != null || it.id.startsWith("xtream:") }
             System.err.println("[EPG] loadSnapshot: forceEpgReload=$forceEpgReload shouldUseCachedEpg=$shouldUseCachedEpg cachedHasPrograms=$cachedHasPrograms xtreamCreds=${xtreamCreds != null} hasXtreamChannels=$hasXtreamChannels epgCandidates=${epgCandidates.size}")
             val nowNext = if (epgCandidates.isEmpty() && xtreamCreds == null) {
-                onProgress(IptvLoadProgress("No EPG URL configured", 90))
+                onProgress(IptvLoadProgress(context.getString(R.string.iptv_no_epg_url), 90))
                 System.err.println("[EPG] No EPG URL and no Xtream creds - skipping EPG")
                 emptyMap()
             } else if (shouldUseCachedEpg) {
-                onProgress(IptvLoadProgress("Using cached EPG", 92))
+                onProgress(IptvLoadProgress(context.getString(R.string.iptv_using_cached_epg), 92))
                 System.err.println("[EPG] Using cached EPG (${cachedNowNext.size} channels, age=${(now - cachedEpgAt)/1000}s)")
                 cachedNowNext
             } else {
@@ -628,7 +629,7 @@ class IptvRepository @Inject constructor(
                     epgCandidatesToTry.forEachIndexed { index, epgUrl ->
                         if (xmltvResolved) return@forEachIndexed
                         val pct = (90 + ((index * 8) / epgCandidatesToTry.size.coerceAtLeast(1))).coerceIn(90, 98)
-                        onProgress(IptvLoadProgress("Loading full EPG (${index + 1}/${epgCandidatesToTry.size})...", pct))
+                        onProgress(IptvLoadProgress(context.getString(R.string.iptv_loading_full_epg, index + 1, epgCandidatesToTry.size), pct))
                         val attempt = runCatching {
                             withTimeoutOrNull(90_000L) { fetchAndParseEpg(epgUrl, channels) }
                                 ?: throw java.util.concurrent.TimeoutException("EPG download timed out for ${epgUrl.take(80)}")
@@ -697,7 +698,7 @@ class IptvRepository @Inject constructor(
                         loadedAtMs = System.currentTimeMillis()
                     )
                 }
-                onProgress(IptvLoadProgress("Loaded ${channels.size} channels", 100))
+                onProgress(IptvLoadProgress(context.getString(R.string.iptv_loaded_channels, channels.size), 100))
             }
             }
         }
@@ -1063,11 +1064,11 @@ class IptvRepository @Inject constructor(
         onProgress: (IptvLoadProgress) -> Unit
     ): List<IptvChannel> {
         resolveXtreamCredentials(url)?.let { creds ->
-            onProgress(IptvLoadProgress("Detected Xtream provider. Loading live channels...", 6))
+            onProgress(IptvLoadProgress(context.getString(R.string.iptv_detected_xtream), 6))
             runCatching { fetchXtreamLiveChannels(creds, onProgress) }
                 .onSuccess { channels ->
                     if (channels.isNotEmpty()) {
-                        onProgress(IptvLoadProgress("Loaded ${channels.size} live channels from provider API", 95))
+                        onProgress(IptvLoadProgress(context.getString(R.string.iptv_loaded_xtream_live, channels.size), 95))
                         return channels
                     }
                 }
@@ -1076,7 +1077,7 @@ class IptvRepository @Inject constructor(
         var lastError: Throwable? = null
         val maxAttempts = 2
         repeat(maxAttempts) { attempt ->
-            onProgress(IptvLoadProgress("Connecting to playlist (attempt ${attempt + 1}/$maxAttempts)...", 5))
+            onProgress(IptvLoadProgress(context.getString(R.string.iptv_connecting_playlist, attempt + 1, maxAttempts), 5))
             runCatching {
                 fetchAndParseM3uOnce(url, onProgress)
             }.onSuccess { channels ->
@@ -1088,7 +1089,7 @@ class IptvRepository @Inject constructor(
 
             if (attempt < maxAttempts - 1) {
                 val backoffMs = (1_000L * (attempt + 1)).coerceAtMost(2_000L)
-                onProgress(IptvLoadProgress("Retrying in ${backoffMs / 1000}s...", 5))
+                onProgress(IptvLoadProgress(context.getString(R.string.iptv_retrying_in, backoffMs / 1000), 5))
                 delay(backoffMs)
             }
         }
@@ -2803,13 +2804,13 @@ class IptvRepository @Inject constructor(
         val categoriesUrl = "${creds.baseUrl}/player_api.php?username=${creds.username}&password=${creds.password}&action=get_live_categories"
         val streamsUrl = "${creds.baseUrl}/player_api.php?username=${creds.username}&password=${creds.password}&action=get_live_streams"
 
-        onProgress(IptvLoadProgress("Loading categories...", 10))
+        onProgress(IptvLoadProgress(context.getString(R.string.iptv_loading_categories), 10))
         val categories: List<XtreamLiveCategory> =
             requestJson(categoriesUrl, object : TypeToken<List<XtreamLiveCategory>>() {}.type) ?: emptyList()
         val categoryMap = categories
             .associate { it.categoryId.orEmpty() to (it.categoryName?.trim().orEmpty().ifBlank { "Uncategorized" }) }
 
-        onProgress(IptvLoadProgress("Loading live streams...", 35))
+        onProgress(IptvLoadProgress(context.getString(R.string.iptv_loading_live_streams), 35))
         val streams: List<XtreamLiveStream> =
             requestJson(streamsUrl, object : TypeToken<List<XtreamLiveStream>>() {}.type) ?: emptyList()
         if (streams.isEmpty()) return emptyList()
@@ -2818,7 +2819,7 @@ class IptvRepository @Inject constructor(
         return streams.mapIndexedNotNull { index, stream ->
             if (index % 500 == 0) {
                 val pct = (35 + ((index.toLong() * 55L) / total.toLong())).toInt().coerceIn(35, 90)
-                onProgress(IptvLoadProgress("Parsing provider streams... $index/$total", pct))
+                onProgress(IptvLoadProgress(context.getString(R.string.iptv_parsing_streams, index, total), pct))
             }
 
             val streamId = stream.streamId ?: return@mapIndexedNotNull null
@@ -2875,9 +2876,9 @@ class IptvRepository @Inject constructor(
             val progressStream = ProgressInputStream(raw) { bytesRead ->
                 if (contentLength != null) {
                     val pct = ((bytesRead * 70L) / contentLength).toInt().coerceIn(8, 74)
-                    onProgress(IptvLoadProgress("Downloading playlist... $pct%", pct))
+                    onProgress(IptvLoadProgress(context.getString(R.string.iptv_downloading_playlist_pct, pct), pct))
                 } else {
-                    onProgress(IptvLoadProgress("Downloading playlist...", 15))
+                    onProgress(IptvLoadProgress(context.getString(R.string.iptv_downloading_playlist), 15))
                 }
             }
             val stream = BufferedInputStream(progressStream)
@@ -2901,7 +2902,7 @@ class IptvRepository @Inject constructor(
                 }
                 throw IllegalStateException("M3U request failed (HTTP ${response.code}). $detail")
             }
-            onProgress(IptvLoadProgress("Parsing channels...", 78))
+            onProgress(IptvLoadProgress(context.getString(R.string.iptv_parsing_channels), 78))
             return parseM3u(stream, onProgress)
         }
     }
@@ -3057,7 +3058,7 @@ class IptvRepository @Inject constructor(
             }
         }
 
-        onProgress(IptvLoadProgress("Loading EPG (fast Xtream API)...", 90))
+        onProgress(IptvLoadProgress(context.getString(R.string.iptv_loading_epg_xtream), 90))
 
         // Prioritize: favorite channels first, then favorite groups, then rest.
         // Deduplicate stream IDs so we don't fetch the same channel twice.
@@ -3106,7 +3107,7 @@ class IptvRepository @Inject constructor(
                 val done = fetchedCount.incrementAndGet()
                 if (done % 50 == 0) {
                     val pct = (90 + ((done.toLong() * 8L) / total.toLong())).toInt().coerceIn(90, 98)
-                    onProgress(IptvLoadProgress("Loading EPG... $done/$total channels", pct))
+                    onProgress(IptvLoadProgress(context.getString(R.string.iptv_loading_epg_progress, done, total), pct))
                 }
             })
         }
@@ -3128,7 +3129,7 @@ class IptvRepository @Inject constructor(
         }
         if (allListings.isEmpty()) return null
 
-        onProgress(IptvLoadProgress("Parsing EPG data (${allListings.size} listings)...", 98))
+        onProgress(IptvLoadProgress(context.getString(R.string.iptv_parsing_epg_data, allListings.size), 98))
         return buildNowNextFromXtreamListings(allListings, epgIdToChannelIds, streamIdToChannelIds)
     }
 
@@ -3347,12 +3348,12 @@ class IptvRepository @Inject constructor(
                 )
                 parsedCount++
                 if (parsedCount % 10000 == 0) {
-                    onProgress(IptvLoadProgress("Parsing channels... $parsedCount found", 85))
+                    onProgress(IptvLoadProgress(context.getString(R.string.iptv_parsing_channels_found, parsedCount), 85))
                 }
             }
         }
 
-        onProgress(IptvLoadProgress("Finalizing ${channels.size} channels...", 95))
+        onProgress(IptvLoadProgress(context.getString(R.string.iptv_finalizing_channels, channels.size), 95))
         return channels.distinctBy { it.id }
     }
 

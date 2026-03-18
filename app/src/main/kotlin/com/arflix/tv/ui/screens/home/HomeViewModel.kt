@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import coil.ImageLoader
 import coil.request.ImageRequest
 import coil.size.Precision
+import com.arflix.tv.R
 import com.arflix.tv.data.model.Category
 import com.arflix.tv.data.model.CatalogConfig
 import com.arflix.tv.data.model.MediaItem
@@ -251,24 +252,24 @@ class HomeViewModel @Inject constructor(
         }
         val overviewParts = mutableListOf<String>()
         if (nowProgram != null) {
-            overviewParts.add("Now: ${fmtRange(nowProgram)}  ${nowProgram.title}")
+            overviewParts.add(context.getString(R.string.now_label, "${fmtRange(nowProgram)}  ${nowProgram.title}"))
             if (!nowProgram.description.isNullOrBlank()) {
                 overviewParts.add(nowProgram.description)
             }
         }
         if (nextProgram != null) {
-            overviewParts.add("Next: ${fmtRange(nextProgram)}  ${nextProgram.title}")
+            overviewParts.add(context.getString(R.string.next_label, "${fmtRange(nextProgram)}  ${nextProgram.title}"))
         }
 
         return MediaItem(
             id = stableId,
             title = channel.name,
             subtitle = channel.group,
-            overview = overviewParts.joinToString("\n").ifBlank { "Live TV" },
+            overview = overviewParts.joinToString("\n").ifBlank { context.getString(R.string.tv_live) },
             mediaType = MediaType.TV,
             image = channel.logo ?: "",
             backdrop = channel.logo,
-            badge = "LIVE",
+            badge = context.getString(R.string.tv_live).uppercase(),
             status = "$IPTV_STATUS_PREFIX${channel.id}",
             isOngoing = true
         )
@@ -303,7 +304,7 @@ class HomeViewModel @Inject constructor(
 
         return Category(
             id = FAVORITE_TV_CATEGORY_ID,
-            title = "Favorite TV",
+            title = context.getString(R.string.my_favorites_group),
             items = items
         )
     }
@@ -836,7 +837,7 @@ class HomeViewModel @Inject constructor(
             }
             val placeholderContinueWatching = Category(
                 id = "continue_watching",
-                title = "Continue Watching",
+                title = context.getString(R.string.continue_watching),
                 items = placeholderItems
             )
             filteredCategories.add(0, placeholderContinueWatching)
@@ -1460,7 +1461,7 @@ class HomeViewModel @Inject constructor(
             rows.add(
                 Category(
                     id = "continue_watching",
-                    title = "Continue Watching",
+                    title = context.getString(R.string.continue_watching),
                     items = cachedContinueWatching.map { it.toMediaItem() }
                 )
             )
@@ -1468,7 +1469,7 @@ class HomeViewModel @Inject constructor(
             rows.add(
                 Category(
                     id = "continue_watching",
-                    title = "Continue Watching",
+                    title = context.getString(R.string.continue_watching),
                     items = placeholderItems
                 )
             )
@@ -2230,12 +2231,12 @@ class HomeViewModel @Inject constructor(
                 }
                 runCatching { cloudSyncRepository.pushToCloud() }
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = if (isInWatchlist) "Removed from watchlist" else "Added to watchlist",
+                    toastMessage = if (isInWatchlist) context.getString(R.string.removed_from_watchlist) else context.getString(R.string.added_to_watchlist),
                     toastType = ToastType.SUCCESS
                 )
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = "Failed to update watchlist",
+                    toastMessage = context.getString(R.string.watchlist_update_failed),
                     toastType = ToastType.ERROR
                 )
             }
@@ -2249,13 +2250,12 @@ class HomeViewModel @Inject constructor(
                     if (item.isWatched) {
                         traktRepository.markMovieUnwatched(item.id)
                         _uiState.value = _uiState.value.copy(
-                            toastMessage = "Marked as unwatched",
+                            toastMessage = context.getString(R.string.marked_as_unwatched_success),
                             toastType = ToastType.SUCCESS
                         )
                     } else {
-                        traktRepository.markMovieWatched(item.id)
                         _uiState.value = _uiState.value.copy(
-                            toastMessage = "Marked as watched",
+                            toastMessage = context.getString(R.string.marked_as_watched_success),
                             toastType = ToastType.SUCCESS
                         )
                     }
@@ -2275,10 +2275,9 @@ class HomeViewModel @Inject constructor(
 
                         _uiState.value = _uiState.value.copy(
                             categories = updatedCategories,
-                            toastMessage = "S${nextEp.seasonNumber}E${nextEp.episodeNumber} marked as watched",
+                            toastMessage = context.getString(R.string.episode_marked_as_watched, nextEp.seasonNumber, nextEp.episodeNumber),
                             toastType = ToastType.SUCCESS
                         )
-
                         // Sync to backend after UI update (these may be slow for non-Trakt/non-Cloud profiles)
                         traktRepository.markEpisodeWatched(item.id, nextEp.seasonNumber, nextEp.episodeNumber)
                         watchHistoryRepository.removeFromHistory(item.id, nextEp.seasonNumber, nextEp.episodeNumber)
@@ -2318,7 +2317,7 @@ class HomeViewModel @Inject constructor(
                         } catch (_: Exception) {}
                     } else {
                         _uiState.value = _uiState.value.copy(
-                            toastMessage = "No episode info available",
+                            toastMessage = context.getString(R.string.no_episode_info),
                             toastType = ToastType.ERROR
                         )
                     }
@@ -2326,7 +2325,7 @@ class HomeViewModel @Inject constructor(
                 runCatching { launcherContinueWatchingRepository.refreshForCurrentProfile() }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = "Failed to update watched status",
+                    toastMessage = context.getString(R.string.watched_update_failed),
                     toastType = ToastType.ERROR
                 )
             }
@@ -2340,12 +2339,12 @@ class HomeViewModel @Inject constructor(
                     if (!item.isWatched) {
                         traktRepository.markMovieWatched(item.id)
                         _uiState.value = _uiState.value.copy(
-                            toastMessage = "Marked as watched",
+                            toastMessage = context.getString(R.string.marked_as_watched_success),
                             toastType = ToastType.SUCCESS
                         )
                     } else {
                         _uiState.value = _uiState.value.copy(
-                            toastMessage = "Already watched",
+                            toastMessage = context.getString(R.string.already_watched),
                             toastType = ToastType.INFO
                         )
                     }
@@ -2365,10 +2364,9 @@ class HomeViewModel @Inject constructor(
 
                         _uiState.value = _uiState.value.copy(
                             categories = updatedCategories,
-                            toastMessage = "S${nextEp.seasonNumber}E${nextEp.episodeNumber} marked as watched",
+                            toastMessage = context.getString(R.string.episode_marked_as_watched, nextEp.seasonNumber, nextEp.episodeNumber),
                             toastType = ToastType.SUCCESS
                         )
-
                         // Sync to backend after UI update (these may be slow for non-Trakt/non-Cloud profiles)
                         try {
                             traktRepository.markEpisodeWatched(item.id, nextEp.seasonNumber, nextEp.episodeNumber)
@@ -2414,7 +2412,7 @@ class HomeViewModel @Inject constructor(
                         } catch (_: Exception) {}
                     } else {
                         _uiState.value = _uiState.value.copy(
-                            toastMessage = "No episode info available",
+                            toastMessage = context.getString(R.string.no_episode_info),
                             toastType = ToastType.ERROR
                         )
                     }
@@ -2422,7 +2420,7 @@ class HomeViewModel @Inject constructor(
                 runCatching { launcherContinueWatchingRepository.refreshForCurrentProfile() }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = "Failed to update watched status",
+                    toastMessage = context.getString(R.string.watched_update_failed),
                     toastType = ToastType.ERROR
                 )
             }
@@ -2462,7 +2460,7 @@ class HomeViewModel @Inject constructor(
 
                 _uiState.value = _uiState.value.copy(
                     categories = updatedCategories,
-                    toastMessage = "Removed from Continue Watching",
+                    toastMessage = context.getString(R.string.removed_from_continue_watching),
                     toastType = ToastType.SUCCESS
                 )
                 runCatching { launcherContinueWatchingRepository.refreshForCurrentProfile() }
@@ -2475,7 +2473,7 @@ class HomeViewModel @Inject constructor(
                 }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = "Failed to remove from Continue Watching",
+                    toastMessage = context.getString(R.string.remove_from_continue_watching_failed),
                     toastType = ToastType.ERROR
                 )
             }

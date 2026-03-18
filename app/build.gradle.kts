@@ -28,7 +28,7 @@ android {
         targetSdk = 35
         versionCode = 194
         versionName = "1.9.2"
-        buildConfigField("String", "GITHUB_OWNER", "\"ProdigyV21\"")
+        buildConfigField("String", "GITHUB_OWNER", "\"Eragorn\"")
         buildConfigField("String", "GITHUB_REPO", "\"ARVIO\"")
 
         // Support both 32-bit and 64-bit devices (required for Google Play since 2019)

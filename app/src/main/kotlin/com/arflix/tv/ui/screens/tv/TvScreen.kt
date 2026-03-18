@@ -59,6 +59,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -85,6 +86,7 @@ import androidx.media3.ui.PlayerView
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
+import com.arflix.tv.R
 import coil.request.ImageRequest
 import coil.size.Precision
 import com.arflix.tv.data.model.IptvChannel
@@ -208,7 +210,7 @@ fun TvScreen(
         }
     }
     LaunchedEffect(groups, selectedGroup, channels.size) {
-        if (selectedGroup == "My Favorites" && channels.isEmpty() && groups.size > 1 && groupIndex == 0) {
+        if (uiState.isFavoritesGroup(selectedGroup) && channels.isEmpty() && groups.size > 1 && groupIndex == 0) {
             groupIndex = 1
         }
     }
@@ -674,7 +676,7 @@ fun TvScreen(
                                     .padding(bottom = 8.dp),
                                 horizontalArrangement = Arrangement.End
                             ) {
-                                val msg = uiState.loadingMessage?.takeIf { it.isNotBlank() } ?: "Refreshing Live TV..."
+                                val msg = uiState.loadingMessage?.takeIf { it.isNotBlank() } ?: stringResource(R.string.refreshing_live_tv)
                                 Text(
                                     text = "$msg ${uiState.loadingPercent}%",
                                     style = ArflixTypography.caption,
@@ -865,7 +867,7 @@ private fun CategoryRail(
             .padding(horizontal = 8.dp, vertical = 10.dp)
     ) {
         Text(
-            text = "Categories",
+            text = stringResource(R.string.categories),
             style = ArflixTypography.caption.copy(fontSize = 11.sp, letterSpacing = 0.7.sp),
             color = TextSecondary.copy(alpha = 0.7f),
             modifier = Modifier.padding(start = 8.dp, bottom = 6.dp, top = 1.dp)
@@ -1086,7 +1088,7 @@ private fun FullscreenEpgOverlay(
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "LIVE",
+                            text = stringResource(R.string.tv_live).uppercase(),
                             style = ArflixTypography.caption.copy(fontWeight = FontWeight.Bold, fontSize = if (isMobile) 10.sp else 12.sp),
                             color = Color.Black,
                             modifier = Modifier
@@ -1106,7 +1108,7 @@ private fun FullscreenEpgOverlay(
                     Spacer(modifier = Modifier.height(if (isMobile) 8.dp else 12.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "NEXT",
+                            text = stringResource(R.string.tv_next).uppercase(),
                             style = ArflixTypography.caption.copy(fontWeight = FontWeight.Bold, fontSize = if (isMobile) 9.sp else 11.sp),
                             color = Color.White.copy(alpha = 0.8f),
                             modifier = Modifier
@@ -1166,9 +1168,9 @@ private fun HeroPreviewPanel(
                     modifier = Modifier.size(26.dp)
                 )
                 Spacer(modifier = Modifier.height(6.dp))
-                Text("Select a channel to start preview", style = ArflixTypography.body.copy(fontSize = 16.sp), color = TextSecondary)
+                Text(stringResource(R.string.tv_select_channel_preview), style = ArflixTypography.body.copy(fontSize = 16.sp), color = TextSecondary)
                 Spacer(modifier = Modifier.height(2.dp))
-                Text("OK: play  |  OK again: fullscreen", style = ArflixTypography.caption.copy(fontSize = 11.sp), color = TextSecondary.copy(alpha = 0.8f))
+                Text(stringResource(R.string.tv_preview_instructions), style = ArflixTypography.caption.copy(fontSize = 11.sp), color = TextSecondary.copy(alpha = 0.8f))
             }
         }
         return
@@ -1218,7 +1220,7 @@ private fun HeroPreviewPanel(
             if (nowProgram != null) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "NOW",
+                        text = stringResource(R.string.tv_now),
                         style = ArflixTypography.caption.copy(fontSize = 11.sp),
                         color = AccentGreen,
                         modifier = Modifier
@@ -1242,7 +1244,7 @@ private fun HeroPreviewPanel(
                 )
             } else {
                 Text(
-                    text = "Live",
+                    text = stringResource(R.string.tv_live),
                     style = ArflixTypography.body,
                     color = Color.White.copy(alpha = 0.7f)
                 )
@@ -1252,7 +1254,7 @@ private fun HeroPreviewPanel(
                 Spacer(modifier = Modifier.height(3.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "NEXT",
+                        text = stringResource(R.string.tv_next),
                         style = ArflixTypography.caption.copy(fontSize = 10.sp),
                         color = TextSecondary,
                         modifier = Modifier
@@ -1549,7 +1551,7 @@ private fun GuideChannelRow(
                     if (isPlaying) {
                         Spacer(modifier = Modifier.width(5.dp))
                         Text(
-                            text = "LIVE",
+                            text = stringResource(R.string.tv_live).uppercase(),
                             style = ArflixTypography.caption.copy(fontSize = 7.sp, fontWeight = FontWeight.Bold),
                             color = Color.White,
                             modifier = Modifier
@@ -1859,10 +1861,10 @@ private fun NotConfiguredPanel() {
                 modifier = Modifier.size(40.dp)
             )
             Spacer(modifier = Modifier.height(12.dp))
-            Text("IPTV is not configured", style = ArflixTypography.sectionTitle, color = TextPrimary)
+            Text(stringResource(R.string.tv_not_configured), style = ArflixTypography.sectionTitle, color = TextPrimary)
             Spacer(modifier = Modifier.height(6.dp))
             Text(
-                "Open Settings and add your M3U URL.",
+                stringResource(R.string.tv_not_configured_desc),
                 style = ArflixTypography.body,
                 color = TextSecondary
             )

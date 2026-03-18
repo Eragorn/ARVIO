@@ -1,11 +1,15 @@
 package com.arflix.tv.ui.screens.settings
 
 import android.content.Context
+import android.content.res.Configuration
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.os.LocaleListCompat
 import com.arflix.tv.BuildConfig
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.arflix.tv.R
 import com.arflix.tv.data.api.TraktDeviceCode
 import com.arflix.tv.data.model.Addon
 import com.arflix.tv.data.model.CatalogConfig
@@ -53,6 +57,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.Locale
 import javax.inject.Inject
 
 enum class ToastType {
@@ -117,7 +122,8 @@ data class SettingsUiState(
     val torrServerBaseUrl: String = "",
     // Toast
     val toastMessage: String? = null,
-    val toastType: ToastType = ToastType.INFO
+    val toastType: ToastType = ToastType.INFO,
+    val currentLanguage: String = "en"
 )
 
 @HiltViewModel
@@ -161,6 +167,7 @@ class SettingsViewModel @Inject constructor(
     private fun autoPlayMinQualityKeyFor(profileId: String) = profileManager.profileStringKeyFor(profileId, "auto_play_min_quality")
     private fun includeSpecialsKey() = profileManager.profileBooleanKey("include_specials")
     private fun includeSpecialsKeyFor(profileId: String) = profileManager.profileBooleanKeyFor(profileId, "include_specials")
+    private fun appLanguageKey() = profileManager.profileStringKey("app_language")
     private val gson = Gson()
     private var lastObservedIptvM3u: String = ""
 
@@ -228,6 +235,22 @@ class SettingsViewModel @Inject constructor(
             val autoPlaySingleSource = prefs[autoPlaySingleSourceKey()] ?: true
             val autoPlayMinQuality = normalizeAutoPlayMinQuality(prefs[autoPlayMinQualityKey()])
             val includeSpecials = prefs[includeSpecialsKey()] ?: false
+            val savedLanguage = prefs[appLanguageKey()]
+
+            // App Language
+            val currentAppLocale = AppCompatDelegate.getApplicationLocales()
+            val languageCode = if (savedLanguage != null) {
+                // If we have a saved language, ensure it's applied
+                if (currentAppLocale.toLanguageTags() != savedLanguage) {
+                    val appLocale: LocaleListCompat = LocaleListCompat.forLanguageTags(savedLanguage)
+                    AppCompatDelegate.setApplicationLocales(appLocale)
+                }
+                savedLanguage
+            } else if (!currentAppLocale.isEmpty) {
+                currentAppLocale.toLanguageTags()
+            } else {
+                "en"
+            }
 
             // Check auth statuses
             val authState = authRepository.authState.first()
@@ -279,7 +302,8 @@ class SettingsViewModel @Inject constructor(
                 showUnknownSourcesDialog = currentState.showUnknownSourcesDialog,
                 appUpdateError = currentState.appUpdateError,
                 catalogs = existingCatalogs,
-                addons = addons
+                addons = addons,
+                currentLanguage = languageCode
             )
         }
     }
@@ -387,7 +411,7 @@ class SettingsViewModel @Inject constructor(
                         syncedMovies = result.moviesSynced,
                         syncedEpisodes = result.episodesSynced,
                         lastSyncTime = formatSyncTime(java.time.Instant.now().toString()),
-                        toastMessage = "Synced ${result.moviesSynced} movies and ${result.episodesSynced} episodes",
+                        toastMessage = context.getString(R.string.sync_success, result.moviesSynced, result.episodesSynced),
                         toastType = ToastType.SUCCESS
                     )
                     // Invalidate repository cache to pick up new data
@@ -397,7 +421,7 @@ class SettingsViewModel @Inject constructor(
                 is SyncResult.Error -> {
                     if (!silent) {
                         _uiState.value = _uiState.value.copy(
-                            toastMessage = "Sync failed: ${result.message}",
+                            toastMessage = context.getString(R.string.sync_failed, result.message),
                             toastType = ToastType.ERROR
                         )
                     }
@@ -416,9 +440,9 @@ class SettingsViewModel @Inject constructor(
                         syncedEpisodes = _uiState.value.syncedEpisodes + result.episodesSynced,
                         lastSyncTime = formatSyncTime(java.time.Instant.now().toString()),
                         toastMessage = if (result.moviesSynced == 0 && result.episodesSynced == 0)
-                            "Already up to date"
+                            context.getString(R.string.sync_already_up_to_date)
                         else
-                            "Synced ${result.moviesSynced} movies and ${result.episodesSynced} episodes",
+                            context.getString(R.string.sync_success, result.moviesSynced, result.episodesSynced),
                         toastType = ToastType.SUCCESS
                     )
                     // Invalidate repository cache to pick up new data
@@ -427,7 +451,7 @@ class SettingsViewModel @Inject constructor(
                 }
                 is SyncResult.Error -> {
                     _uiState.value = _uiState.value.copy(
-                        toastMessage = "Sync failed: ${result.message}",
+                        toastMessage = context.getString(R.string.sync_failed, result.message),
                         toastType = ToastType.ERROR
                     )
                 }
@@ -848,13 +872,13 @@ class SettingsViewModel @Inject constructor(
             val result = catalogRepository.addCustomCatalog(url)
             result.onSuccess { catalog ->
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = "Added ${catalog.title}",
+                    toastMessage = context.getString(R.string.catalog_added, catalog.title),
                     toastType = ToastType.SUCCESS
                 )
                 syncLocalStateToCloud(silent = true)
             }.onFailure { error ->
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = error.message ?: "Failed to add catalog",
+                    toastMessage = error.message ?: context.getString(R.string.catalog_add_failed),
                     toastType = ToastType.ERROR
                 )
             }
@@ -866,13 +890,13 @@ class SettingsViewModel @Inject constructor(
             val result = catalogRepository.updateCustomCatalog(catalogId, url)
             result.onSuccess { catalog ->
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = "Updated ${catalog.title}",
+                    toastMessage = context.getString(R.string.catalog_updated, catalog.title),
                     toastType = ToastType.SUCCESS
                 )
                 syncLocalStateToCloud(silent = true)
             }.onFailure { error ->
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = error.message ?: "Failed to update catalog",
+                    toastMessage = error.message ?: context.getString(R.string.catalog_update_failed),
                     toastType = ToastType.ERROR
                 )
             }
@@ -884,13 +908,13 @@ class SettingsViewModel @Inject constructor(
             val result = catalogRepository.removeCustomCatalog(catalogId)
             result.onSuccess {
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = "Catalog removed",
+                    toastMessage = context.getString(R.string.catalog_removed),
                     toastType = ToastType.SUCCESS
                 )
                 syncLocalStateToCloud(silent = true)
             }.onFailure { error ->
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = error.message ?: "Failed to remove catalog",
+                    toastMessage = error.message ?: context.getString(R.string.catalog_remove_failed),
                     toastType = ToastType.ERROR
                 )
             }
@@ -926,7 +950,7 @@ class SettingsViewModel @Inject constructor(
             val trimmedEpg = epgUrl.trim()
             if (trimmedM3u.isBlank()) {
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = "M3U URL is required",
+                    toastMessage = context.getString(R.string.iptv_url_required),
                     toastType = ToastType.ERROR
                 )
                 return@launch
@@ -960,7 +984,7 @@ class SettingsViewModel @Inject constructor(
         val usingXtream = user.isNotBlank() || pass.isNotBlank()
         if (usingXtream && (user.isBlank() || pass.isBlank())) {
             _uiState.value = _uiState.value.copy(
-                toastMessage = "Xtream requires both username and password",
+                toastMessage = context.getString(R.string.xtream_auth_required),
                 toastType = ToastType.ERROR
             )
             return
@@ -1026,7 +1050,7 @@ class SettingsViewModel @Inject constructor(
                 if (error is CancellationException) {
                     return@onFailure
                 }
-                val failMessage = if (configured) "Failed to load IPTV playlist" else "Failed to refresh IPTV"
+                val failMessage = if (configured) context.getString(R.string.iptv_load_failed) else context.getString(R.string.iptv_refresh_failed)
                 _uiState.value = _uiState.value.copy(
                     isIptvLoading = false,
                     iptvError = error.message ?: failMessage,
@@ -1056,11 +1080,11 @@ class SettingsViewModel @Inject constructor(
                 isIptvLoading = false,
                 iptvChannelCount = 0,
                 iptvError = null,
-                iptvStatusMessage = "IPTV playlist removed",
+                iptvStatusMessage = context.getString(R.string.iptv_playlist_removed),
                 iptvStatusType = ToastType.SUCCESS,
                 iptvProgressText = null,
                 iptvProgressPercent = 0,
-                toastMessage = "IPTV playlist removed",
+                toastMessage = context.getString(R.string.iptv_playlist_removed),
                 toastType = ToastType.SUCCESS
             )
             syncLocalStateToCloud(silent = true)
@@ -1112,7 +1136,7 @@ class SettingsViewModel @Inject constructor(
                     cloudExpiresAtMs = 0L
                     _uiState.value = _uiState.value.copy(
                         isCloudAuthWorking = false,
-                        toastMessage = error.message ?: "Failed to start cloud login",
+                        toastMessage = error.message ?: context.getString(R.string.cloud_login_start_failed),
                         toastType = ToastType.ERROR
                     )
                 }
@@ -1174,7 +1198,7 @@ class SettingsViewModel @Inject constructor(
 
         if (deviceCode.isNullOrBlank() || userCode.isNullOrBlank()) {
             _uiState.value = _uiState.value.copy(
-                toastMessage = "Cloud login expired. Open ARVIO Cloud again.",
+                toastMessage = context.getString(R.string.cloud_login_expired),
                 toastType = ToastType.ERROR,
                 isCloudAuthWorking = false,
                 showCloudEmailPasswordDialog = false
@@ -1186,14 +1210,14 @@ class SettingsViewModel @Inject constructor(
         }
         if (trimmedEmail.isBlank()) {
             _uiState.value = _uiState.value.copy(
-                toastMessage = "Email is required",
+                toastMessage = context.getString(R.string.email_required),
                 toastType = ToastType.ERROR
             )
             return
         }
         if (password.isBlank()) {
             _uiState.value = _uiState.value.copy(
-                toastMessage = "Password is required",
+                toastMessage = context.getString(R.string.password_required),
                 toastType = ToastType.ERROR
             )
             return
@@ -1208,7 +1232,7 @@ class SettingsViewModel @Inject constructor(
                 intent = if (createAccount) "signup" else "signin"
             ).onSuccess {
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = "Waiting for approval...",
+                    toastMessage = context.getString(R.string.waiting_approval),
                     toastType = ToastType.INFO,
                     showCloudEmailPasswordDialog = false,
                     isCloudAuthWorking = true
@@ -1267,7 +1291,7 @@ class SettingsViewModel @Inject constructor(
                                 showCloudEmailPasswordDialog = false,
                                 cloudUserCode = null,
                                 cloudVerificationUrl = null,
-                                toastMessage = "Signed in successfully",
+                                toastMessage = context.getString(R.string.sign_in_success),
                                 toastType = ToastType.SUCCESS
                             )
                             return@launch
@@ -1311,7 +1335,7 @@ class SettingsViewModel @Inject constructor(
 
             _uiState.value = _uiState.value.copy(
                 isCloudAuthWorking = false,
-                toastMessage = "Sign-in did not complete. Try again.",
+                toastMessage = context.getString(R.string.sign_in_failed),
                 toastType = ToastType.ERROR
             )
         }
@@ -1332,7 +1356,7 @@ class SettingsViewModel @Inject constructor(
 
             if (!silent && result.isSuccess) {
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = "Cloud sync complete",
+                    toastMessage = context.getString(R.string.cloud_sync_complete),
                     toastType = ToastType.SUCCESS
                 )
             } else if (!silent && result.isFailure) {
@@ -1358,7 +1382,7 @@ class SettingsViewModel @Inject constructor(
                 runCatching { launcherContinueWatchingRepository.refreshForCurrentProfile() }
                 if (!silent) {
                     _uiState.value = _uiState.value.copy(
-                        toastMessage = "Cloud restore complete",
+                        toastMessage = context.getString(R.string.cloud_restore_complete),
                         toastType = ToastType.SUCCESS
                     )
                 }
@@ -1367,7 +1391,7 @@ class SettingsViewModel @Inject constructor(
             CloudSyncRepository.RestoreResult.NO_BACKUP -> {
                 if (!silent) {
                     _uiState.value = _uiState.value.copy(
-                        toastMessage = "No cloud backup found",
+                        toastMessage = context.getString(R.string.no_cloud_backup),
                         toastType = ToastType.INFO
                     )
                 }
@@ -1376,7 +1400,7 @@ class SettingsViewModel @Inject constructor(
             CloudSyncRepository.RestoreResult.FAILED -> {
                 if (!silent) {
                     _uiState.value = _uiState.value.copy(
-                        toastMessage = "Cloud restore failed",
+                        toastMessage = context.getString(R.string.cloud_restore_failed),
                         toastType = ToastType.ERROR
                     )
                 }
@@ -1388,6 +1412,44 @@ class SettingsViewModel @Inject constructor(
     fun onCloudProfileSwitchHandled() {
         if (_uiState.value.shouldSwitchProfile) {
             _uiState.value = _uiState.value.copy(shouldSwitchProfile = false)
+        }
+    }
+
+    fun setLanguage(languageCode: String) {
+        viewModelScope.launch {
+            // Persist the choice
+            context.settingsDataStore.edit { prefs ->
+                prefs[appLanguageKey()] = languageCode
+            }
+
+            // Apply locale change
+            val appLocale: LocaleListCompat = LocaleListCompat.forLanguageTags(languageCode)
+            AppCompatDelegate.setApplicationLocales(appLocale)
+            
+            // Create a configuration context for immediate translation reload
+            val config = Configuration(context.resources.configuration)
+            val locale = if (languageCode.contains("-")) {
+                val parts = languageCode.split("-")
+                Locale(parts[0], parts[1])
+            } else {
+                Locale(languageCode)
+            }
+            Locale.setDefault(locale)
+            config.setLocale(locale)
+            val localizedContext = context.createConfigurationContext(config)
+
+            // Update state with localized toast
+            _uiState.value = _uiState.value.copy(
+                currentLanguage = languageCode,
+                toastMessage = localizedContext.getString(R.string.language_selected, if (languageCode == "fr") "Français" else "English"),
+                toastType = ToastType.SUCCESS
+            )
+            
+            // Note: On most Android versions, setApplicationLocales will trigger an Activity recreation.
+            // If we have 'locale' in configChanges in Manifest, it won't recreate, 
+            // but Compose's stringResource(id) will react to the new configuration.
+            loadSettings()
+            initializeCatalogs()
         }
     }
 
@@ -1460,14 +1522,14 @@ class SettingsViewModel @Inject constructor(
         val update = _uiState.value.availableAppUpdate ?: return
         if (!appUpdateRepository.supportsSelfUpdate()) {
             _uiState.value = _uiState.value.copy(
-                toastMessage = "This install is managed by the Play Store.",
+                toastMessage = context.getString(R.string.app_update_managed_play),
                 toastType = ToastType.INFO
             )
             return
         }
         if (!_uiState.value.isAppUpdateAvailable) {
             _uiState.value = _uiState.value.copy(
-                toastMessage = "You already have the latest version",
+                toastMessage = context.getString(R.string.latest_version),
                 toastType = ToastType.INFO,
                 showAppUpdateDialog = true,
                 downloadedApkPath = null
@@ -1597,7 +1659,7 @@ class SettingsViewModel @Inject constructor(
                         traktCode = null,
                         isTraktPolling = false,
                         traktExpiration = expirationDate,
-                        toastMessage = "Trakt connected successfully",
+                        toastMessage = context.getString(R.string.trakt_connected),
                         toastType = ToastType.SUCCESS
                     )
                     traktRepository.clearContinueWatchingCache()
@@ -1643,7 +1705,7 @@ class SettingsViewModel @Inject constructor(
             traktRepository.logout()
             _uiState.value = _uiState.value.copy(
                 isTraktAuthenticated = false,
-                toastMessage = "Trakt disconnected",
+                toastMessage = context.getString(R.string.trakt_disconnected),
                 toastType = ToastType.SUCCESS
             )
             syncLocalStateToCloud(silent = true, force = true)
@@ -1659,7 +1721,7 @@ class SettingsViewModel @Inject constructor(
             cancelCloudAuth()
             authRepository.signOut()
             _uiState.value = _uiState.value.copy(
-                toastMessage = "Signed out",
+                toastMessage = context.getString(R.string.signed_out),
                 toastType = ToastType.SUCCESS
             )
         }

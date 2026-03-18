@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import coil.ImageLoader
 import coil.request.ImageRequest
 import coil.size.Precision
+import com.arflix.tv.R
 import com.arflix.tv.data.model.Category
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.repository.MediaRepository
@@ -24,10 +25,11 @@ import javax.inject.Inject
  * Pre-loads all data needed for instant home screen display
  */
 data class StartupState(
+    @ApplicationContext private val context: Context,
     val isLoading: Boolean = true,
     val isReady: Boolean = false,
     val loadingProgress: Float = 0f,
-    val loadingMessage: String = "Starting...",
+    val loadingMessage: String = context.getString(R.string.starting),
     val categories: List<Category> = emptyList(),
     val heroItem: MediaItem? = null,
     val heroLogoUrl: String? = null,
@@ -51,7 +53,7 @@ class StartupViewModel @Inject constructor(
     private val heroBackdropPreloadWidth = 1280
     private val heroBackdropPreloadHeight = 720
 
-    private val _state = MutableStateFlow(StartupState())
+    private val _state = MutableStateFlow(StartupState(context))
     val state: StateFlow<StartupState> = _state.asStateFlow()
 
     init {
@@ -63,7 +65,7 @@ class StartupViewModel @Inject constructor(
             try {
                 // App always opens on profile selection first, so defer heavy
                 // home network preloading to HomeViewModel after profile is chosen.
-                updateProgress(0.7f, "Preparing...")
+                updateProgress(0.7f, context.getString(R.string.preparing))
 
                 _state.value = _state.value.copy(
                     isLoading = false,
@@ -73,7 +75,7 @@ class StartupViewModel @Inject constructor(
                     isAuthenticated = false
                 )
 
-                updateProgress(1.0f, "Ready!")
+                updateProgress(1.0f, context.getString(R.string.ready))
 
             } catch (e: Exception) {
                 _state.value = _state.value.copy(

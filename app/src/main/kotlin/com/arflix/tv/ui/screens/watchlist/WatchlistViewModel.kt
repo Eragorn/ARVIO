@@ -1,11 +1,14 @@
 package com.arflix.tv.ui.screens.watchlist
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.arflix.tv.R
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.repository.CloudSyncRepository
 import com.arflix.tv.data.repository.WatchlistRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,7 +31,8 @@ data class WatchlistUiState(
 @HiltViewModel
 class WatchlistViewModel @Inject constructor(
     private val watchlistRepository: WatchlistRepository,
-    private val cloudSyncRepository: CloudSyncRepository
+    private val cloudSyncRepository: CloudSyncRepository,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(WatchlistUiState())
@@ -101,7 +105,7 @@ class WatchlistViewModel @Inject constructor(
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    toastMessage = "Failed to refresh",
+                    toastMessage = context.getString(R.string.refresh_failed),
                     toastType = ToastType.ERROR
                 )
             }
@@ -115,7 +119,7 @@ class WatchlistViewModel @Inject constructor(
                 val updatedItems = _uiState.value.items.filter { it.id != item.id || it.mediaType != item.mediaType }
                 _uiState.value = _uiState.value.copy(
                     items = updatedItems,
-                    toastMessage = "Removed from watchlist",
+                    toastMessage = context.getString(R.string.removed_from_watchlist),
                     toastType = ToastType.SUCCESS
                 )
                 // Then sync to backend
@@ -123,7 +127,7 @@ class WatchlistViewModel @Inject constructor(
                 runCatching { cloudSyncRepository.pushToCloud() }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = "Failed to remove from watchlist",
+                    toastMessage = context.getString(R.string.watchlist_remove_failed),
                     toastType = ToastType.ERROR
                 )
             }

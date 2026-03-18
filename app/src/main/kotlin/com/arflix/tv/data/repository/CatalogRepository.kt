@@ -1,6 +1,7 @@
 package com.arflix.tv.data.repository
 
 import android.content.Context
+import android.content.res.Configuration
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.edit
@@ -223,9 +224,10 @@ class CatalogRepository @Inject constructor(
             val kept = existing.mapNotNull { config ->
                 if (config.isPreinstalled) {
                     val defaultCfg = defaultMap[config.id] ?: return@mapNotNull null
-                    // Preserve user-renamed titles: if the user changed the title
-                    // from a previous default, keep their custom title.
-                    if (config.title != defaultCfg.title && config.title.isNotBlank()) {
+
+                    val isLikelyDefault = isDefaultTitle(config.id, config.title)
+                    
+                    if (!isLikelyDefault && config.title.isNotBlank() && config.title != defaultCfg.title) {
                         defaultCfg.copy(title = config.title)
                     } else {
                         defaultCfg
@@ -863,6 +865,40 @@ class CatalogRepository @Inject constructor(
         }
 
         return emptyList()
+    }
+
+    private fun isDefaultTitle(id: String, currentTitle: String): Boolean {
+        val resName = when (id) {
+            "favorite_tv" -> "my_favorites_group"
+            "trending_movies" -> "trending_movies"
+            "trending_tv" -> "trending_series"
+            "trending_anime" -> "trending_anime"
+            "trending_netflix" -> "trending_netflix"
+            "trending_disney" -> "trending_disney"
+            "trending_prime" -> "trending_prime"
+            "trending_hbo" -> "trending_hbo"
+            "trending_apple" -> "trending_apple"
+            "trending_paramount" -> "trending_paramount"
+            "trending_hulu" -> "trending_hulu"
+            "trending_peacock" -> "trending_peacock"
+            else -> null
+        } ?: return false
+
+        // Check if current title matches ANY of the translations for this resource
+        // Since we only support EN and FR, we can check those specifically
+        val enConfig = Configuration(context.resources.configuration).apply { setLocale(java.util.Locale.ENGLISH) }
+        val frConfig = Configuration(context.resources.configuration).apply { setLocale(java.util.Locale.FRENCH) }
+        
+        val enContext = context.createConfigurationContext(enConfig)
+        val frContext = context.createConfigurationContext(frConfig)
+        
+        val enResId = enContext.resources.getIdentifier(resName, "string", enContext.packageName)
+        val frResId = frContext.resources.getIdentifier(resName, "string", frContext.packageName)
+        
+        val enTitle = if (enResId != 0) enContext.getString(enResId) else null
+        val frTitle = if (frResId != 0) frContext.getString(frResId) else null
+        
+        return currentTitle == enTitle || currentTitle == frTitle
     }
 
     private data class ResolvedCatalog(
