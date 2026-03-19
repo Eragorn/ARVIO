@@ -20,6 +20,7 @@
         android:name=".ArflixApplication"
         android:allowBackup="false"
         android:banner="@drawable/app_banner"
+        android:extractNativeLibs="false"
         android:hardwareAccelerated="true"
         android:largeHeap="true"
         android:icon="@mipmap/ic_launcher"

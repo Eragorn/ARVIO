@@ -16,7 +16,7 @@ plugins {
 
 android {
     namespace = "com.arflix.tv"
-    compileSdk = 34
+    compileSdk = 35
 
     flavorDimensions += "distribution"
 
@@ -25,8 +25,8 @@ android {
         // Fire TV devices can be as low as Android 7.1 (API 25) or lower depending on model/OS.
         // Lower minSdk to maximize compatibility and avoid "There was a problem parsing the package".
         minSdk = 21
-        targetSdk = 34
-        versionCode = 193
+        targetSdk = 35
+        versionCode = 194
         versionName = "1.9.2"
         buildConfigField("String", "GITHUB_OWNER", "\"ProdigyV21\"")
         buildConfigField("String", "GITHUB_REPO", "\"ARVIO\"")
@@ -155,6 +155,9 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+        jniLibs {
+            useLegacyPackaging = false  // Required for 16KB page size support
         }
     }
 
