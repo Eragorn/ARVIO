@@ -211,10 +211,11 @@ fun SettingsScreen(
             val options = uiState.audioLanguageOptions
             val maxIndex = (options.size - 1).coerceAtLeast(0)
             val targetIndex = options.indexOfFirst { it.equals(uiState.defaultAudioLanguage, ignoreCase = true) }
-            audioLanguagePickerIndex = if (targetIndex >= 0) targetIndex else audioLanguagePickerIndex.coerceIn(0, maxIndex)
+            audioLanguagePickerIndex =
+                if (targetIndex >= 0) targetIndex else audioLanguagePickerIndex.coerceIn(0, maxIndex)
         }
     }
-    
+
     // Reset content scroll when switching sections.
     LaunchedEffect(sectionIndex) {
         if (scrollState.value != 0) {
@@ -277,9 +278,9 @@ fun SettingsScreen(
             .focusRequester(focusRequester)
             .focusable()
             .onPreviewKeyEvent { event ->
-                    if (isTouchDevice) return@onPreviewKeyEvent false
-                    // BLOCKER FIX: Ignore main screen navigation if modals are open
-                    if (showCustomAddonInput || showSubtitlePicker || showAudioLanguagePicker || showIptvInput || showCatalogInput || uiState.showCloudPairDialog || uiState.showCloudEmailPasswordDialog) return@onPreviewKeyEvent false
+                if (isTouchDevice) return@onPreviewKeyEvent false
+                // BLOCKER FIX: Ignore main screen navigation if modals are open
+                if (showCustomAddonInput || showSubtitlePicker || showAudioLanguagePicker || showIptvInput || showCatalogInput || uiState.showCloudPairDialog || uiState.showCloudEmailPasswordDialog) return@onPreviewKeyEvent false
 
                 if (event.type == KeyEventType.KeyDown) {
                     val currentSection = sections.getOrNull(sectionIndex).orEmpty()
@@ -295,12 +296,14 @@ fun SettingsScreen(
                                     activeZone = Zone.SIDEBAR
                                     isSidebarFocused = true
                                 }
+
                                 Zone.CONTENT -> {
                                     activeZone = Zone.SECTION
                                 }
                             }
                             true
                         }
+
                         Key.DirectionLeft -> {
                             when (activeZone) {
                                 Zone.CONTENT -> {
@@ -314,9 +317,11 @@ fun SettingsScreen(
                                         catalogActionIndex = 0
                                     }
                                 }
+
                                 Zone.SECTION -> {
                                     Unit
                                 }
+
                                 Zone.SIDEBAR -> {
                                     if (sidebarFocusIndex > 0) {
                                         sidebarFocusIndex = (sidebarFocusIndex - 1).coerceIn(0, maxSidebarIndex)
@@ -325,6 +330,7 @@ fun SettingsScreen(
                             }
                             true
                         }
+
                         Key.DirectionRight -> {
                             when (activeZone) {
                                 Zone.SIDEBAR -> {
@@ -332,11 +338,13 @@ fun SettingsScreen(
                                         sidebarFocusIndex = (sidebarFocusIndex + 1).coerceIn(0, maxSidebarIndex)
                                     }
                                 }
+
                                 Zone.SECTION -> {
                                     activeZone = Zone.CONTENT
                                     addonActionIndex = 0
                                     catalogActionIndex = 0
                                 }
+
                                 Zone.CONTENT -> {
                                     if (currentSection == "addons" &&
                                         contentFocusIndex in 0 until uiState.addons.size &&
@@ -344,13 +352,14 @@ fun SettingsScreen(
                                         focusedAddonCanDelete
                                     ) {
                                         addonActionIndex = 1
-} else if (currentSection == "catalogs" && contentFocusIndex > 0 && catalogActionIndex < 3) {
+                                    } else if (currentSection == "catalogs" && contentFocusIndex > 0 && catalogActionIndex < 3) {
                                         catalogActionIndex++
                                     }
                                 }
                             }
                             true
                         }
+
                         Key.DirectionUp -> {
                             when (activeZone) {
                                 Zone.SIDEBAR -> Unit
@@ -365,6 +374,7 @@ fun SettingsScreen(
                                         isSidebarFocused = true
                                     }
                                 }
+
                                 Zone.CONTENT -> {
                                     if (contentFocusIndex > 0) {
                                         contentFocusIndex--
@@ -377,12 +387,14 @@ fun SettingsScreen(
                             }
                             true
                         }
+
                         Key.DirectionDown -> {
                             when (activeZone) {
                                 Zone.SIDEBAR -> {
                                     activeZone = Zone.SECTION
                                     isSidebarFocused = false
                                 }
+
                                 Zone.SECTION -> {
                                     if (sectionIndex < sections.size - 1) {
                                         sectionIndex++
@@ -391,6 +403,7 @@ fun SettingsScreen(
                                         catalogActionIndex = 0
                                     }
                                 }
+
                                 Zone.CONTENT -> {
                                     // Dynamic max based on current section
                                     val maxIndex = when (sectionIndex) {
@@ -410,6 +423,7 @@ fun SettingsScreen(
                             }
                             true
                         }
+
                         Key.Enter, Key.DirectionCenter -> {
                             if (SystemClock.elapsedRealtime() < suppressSelectUntilMs) {
                                 return@onPreviewKeyEvent true
@@ -424,11 +438,14 @@ fun SettingsScreen(
                                             SidebarItem.HOME -> onNavigateToHome()
                                             SidebarItem.TV -> onNavigateToTv()
                                             SidebarItem.WATCHLIST -> onNavigateToWatchlist()
-                                            SidebarItem.SETTINGS -> { /* Already here */ }
+                                            SidebarItem.SETTINGS -> { /* Already here */
+                                            }
+
                                             null -> Unit
                                         }
                                     }
                                 }
+
                                 Zone.SECTION -> activeZone = Zone.CONTENT
                                 Zone.CONTENT -> {
                                     when (sectionIndex) {
@@ -439,6 +456,7 @@ fun SettingsScreen(
                                                     val newLang = if (currentLang.startsWith("fr")) "en" else "fr"
                                                     viewModel.setLanguage(newLang)
                                                 }
+
                                                 1 -> openSubtitlePicker()
                                                 2 -> openAudioLanguagePicker()
                                                 3 -> viewModel.toggleCardLayoutMode()
@@ -448,19 +466,23 @@ fun SettingsScreen(
                                                 7 -> viewModel.cycleAutoPlayMinQuality()
                                             }
                                         }
+
                                         1 -> { // IPTV
                                             when (contentFocusIndex) {
                                                 0 -> {
                                                     showIptvInput = true
                                                 }
+
                                                 1 -> {
                                                     viewModel.refreshIptv(force = true)
                                                 }
+
                                                 2 -> {
                                                     viewModel.clearIptvConfig()
                                                 }
                                             }
                                         }
+
                                         2 -> { // Catalogs
                                             if (contentFocusIndex == 0) {
                                                 showCatalogInput = true
@@ -473,6 +495,7 @@ fun SettingsScreen(
                                                             renameCatalogTitle = catalog.title
                                                             showCatalogRename = true
                                                         }
+
                                                         1 -> viewModel.moveCatalogUp(catalog.id)
                                                         2 -> viewModel.moveCatalogDown(catalog.id)
                                                         else -> viewModel.removeCatalog(catalog.id)
@@ -480,11 +503,13 @@ fun SettingsScreen(
                                                 }
                                             }
                                         }
+
                                         3 -> { // Addons
                                             when {
                                                 contentFocusIndex in 0 until uiState.addons.size -> {
                                                     val addon = uiState.addons[contentFocusIndex]
-                                                    val canDelete = !(addon.id == "opensubtitles" && addon.type == com.arflix.tv.data.model.AddonType.SUBTITLE)
+                                                    val canDelete =
+                                                        !(addon.id == "opensubtitles" && addon.type == com.arflix.tv.data.model.AddonType.SUBTITLE)
                                                     if (addonActionIndex == 0 || !canDelete) {
                                                         // Toggle addon on/off
                                                         viewModel.toggleAddon(addon.id)
@@ -498,12 +523,14 @@ fun SettingsScreen(
                                                         }
                                                     }
                                                 }
+
                                                 else -> {
                                                     // "Add Custom Addon" button
                                                     showCustomAddonInput = true
                                                 }
                                             }
                                         }
+
                                         4 -> { // Accounts
                                             when (contentFocusIndex) {
                                                 0 -> { // Cloud account
@@ -513,6 +540,7 @@ fun SettingsScreen(
                                                         viewModel.startCloudAuth()
                                                     }
                                                 }
+
                                                 1 -> { // Trakt
                                                     if (uiState.isTraktAuthenticated) {
                                                         viewModel.disconnectTrakt()
@@ -522,24 +550,31 @@ fun SettingsScreen(
                                                         viewModel.startTraktAuth()
                                                     }
                                                 }
+
                                                 2 -> { // Switch Profile
                                                     onSwitchProfile()
                                                 }
+
                                                 3 -> { // App Update
                                                     if (uiState.downloadedApkPath != null) {
                                                         viewModel.installAppUpdateOrRequestPermission()
                                                     } else {
-                                                        viewModel.checkForAppUpdates(force = true, showNoUpdateFeedback = true)
+                                                        viewModel.checkForAppUpdates(
+                                                            force = true,
+                                                            showNoUpdateFeedback = true
+                                                        )
                                                     }
                                                 }
                                             }
                                         }
                                     }
                                 }
+
                                 else -> {}
                             }
                             true
                         }
+
                         else -> false
                     }
                 } else false
@@ -570,8 +605,15 @@ fun SettingsScreen(
                             onFrameRateMatchingClick = { viewModel.cycleFrameRateMatchingMode() },
                             onAutoPlayToggle = { viewModel.setAutoPlayNext(it) },
                             onAutoPlaySingleSourceToggle = { viewModel.setAutoPlaySingleSource(it) },
-                            onAutoPlayMinQualityClick = { viewModel.cycleAutoPlayMinQuality() }
+                            onAutoPlayMinQualityClick = { viewModel.cycleAutoPlayMinQuality() },
+                            onLanguageClick = {
+                                val currentLang = uiState.currentLanguage
+                                val newLang = if (currentLang.startsWith("fr")) "en" else "fr"
+                                viewModel.setLanguage(newLang)
+                            },
+                            currentLanguage = uiState.currentLanguage
                         )
+
                         "iptv" -> IptvSettings(
                             m3uUrl = uiState.iptvM3uUrl,
                             epgUrl = uiState.iptvEpgUrl,
@@ -587,12 +629,14 @@ fun SettingsScreen(
                             onRefresh = { viewModel.refreshIptv() },
                             onDelete = { viewModel.clearIptvConfig() }
                         )
+
                         "catalogs" -> CatalogsSettings(
                             catalogs = uiState.catalogs,
                             focusedIndex = -1,
                             focusedActionIndex = catalogActionIndex,
                             onAddCatalog = { showCatalogInput = true }
                         )
+
                         "addons" -> AddonsSettings(
                             addons = uiState.addons,
                             focusedIndex = -1,
@@ -601,6 +645,7 @@ fun SettingsScreen(
                             onDeleteAddon = { viewModel.removeAddon(it) },
                             onAddCustomAddon = { showCustomAddonInput = true }
                         )
+
                         "accounts" -> AccountsSettings(
                             isCloudAuthenticated = uiState.isLoggedIn,
                             cloudEmail = uiState.accountEmail,
@@ -621,7 +666,12 @@ fun SettingsScreen(
                             onCancelTrakt = { viewModel.cancelTraktAuth() },
                             onDisconnectTrakt = { viewModel.disconnectTrakt() },
                             onSwitchProfile = onSwitchProfile,
-                            onCheckUpdates = { viewModel.checkForAppUpdates(force = true, showNoUpdateFeedback = true) },
+                            onCheckUpdates = {
+                                viewModel.checkForAppUpdates(
+                                    force = true,
+                                    showNoUpdateFeedback = true
+                                )
+                            },
                             onInstallUpdate = { viewModel.installAppUpdateOrRequestPermission() }
                         )
                     }
@@ -668,15 +718,15 @@ fun SettingsScreen(
                                 else -> Icons.Default.Settings
                             },
                             title = when (section) {
-                            "general" -> stringResource(R.string.general_settings)
-                            "iptv" -> stringResource(R.string.iptv_settings)
-                            "catalogs" -> stringResource(R.string.catalogs_settings)
-                            "addons" -> stringResource(R.string.addons_settings)
-                            "accounts" -> stringResource(R.string.accounts_settings)
-                            else -> section.replaceFirstChar { it.uppercase() }
+                                "general" -> stringResource(R.string.general_settings)
+                                "iptv" -> stringResource(R.string.iptv_settings)
+                                "catalogs" -> stringResource(R.string.catalogs_settings)
+                                "addons" -> stringResource(R.string.addons_settings)
+                                "accounts" -> stringResource(R.string.accounts_settings)
+                                else -> section.replaceFirstChar { it.uppercase() }
                             },
-                        isSelected = sectionIndex == index,
-                        isFocused = activeZone == Zone.SECTION && sectionIndex == index,
+                            isSelected = sectionIndex == index,
+                            isFocused = activeZone == Zone.SECTION && sectionIndex == index,
                             onClick = {
                                 sectionIndex = index
                                 contentFocusIndex = 0
@@ -722,57 +772,62 @@ fun SettingsScreen(
                             onAutoPlayToggle = { viewModel.setAutoPlayNext(it) },
                             onAutoPlaySingleSourceToggle = { viewModel.setAutoPlaySingleSource(it) },
                             onAutoPlayMinQualityClick = { viewModel.cycleAutoPlayMinQuality() },
-                        onLanguageClick = {
-                            val currentLang = uiState.currentLanguage
-                            val newLang = if (currentLang.startsWith("fr")) "en" else "fr"
-                            viewModel.setLanguage(newLang)
-                        },
-                        currentLanguage = uiState.currentLanguage
-                    )
-                    "iptv" -> IptvSettings(
-                        m3uUrl = uiState.iptvM3uUrl,
-                        epgUrl = uiState.iptvEpgUrl,
-                        channelCount = uiState.iptvChannelCount,
-                        isLoading = uiState.isIptvLoading,
-                        error = uiState.iptvError,
-                        statusMessage = uiState.iptvStatusMessage,
-                        statusType = uiState.iptvStatusType,
-                        progressText = uiState.iptvProgressText,
-                        progressPercent = uiState.iptvProgressPercent,
-                        focusedIndex = if (activeZone == Zone.CONTENT) contentFocusIndex else -1,
-                        onConfigure = { showIptvInput = true },
-                        onRefresh = { viewModel.refreshIptv() },
-                        onDelete = { viewModel.clearIptvConfig() }
-                    )
-                    "catalogs" -> CatalogsSettings(
-                        catalogs = uiState.catalogs,
-                        focusedIndex = if (activeZone == Zone.CONTENT) contentFocusIndex else -1,
-                        focusedActionIndex = catalogActionIndex,
-                        onAddCatalog = { showCatalogInput = true }
-                    )
-                    "addons" -> AddonsSettings(
-                        addons = uiState.addons,
-                        focusedIndex = if (activeZone == Zone.CONTENT) contentFocusIndex else -1,
-                        focusedActionIndex = addonActionIndex,
-                        onToggleAddon = { viewModel.toggleAddon(it) },
-                        onDeleteAddon = { viewModel.removeAddon(it) },
-                        onAddCustomAddon = { showCustomAddonInput = true }
-                    )
-                    "accounts" -> AccountsSettings(
-                        isCloudAuthenticated = uiState.isLoggedIn,
-                        cloudEmail = uiState.accountEmail,
-                        cloudHint = null,
-                        isTraktAuthenticated = uiState.isTraktAuthenticated,
-                        traktCode = uiState.traktCode?.userCode,
-                        traktUrl = uiState.traktCode?.verificationUrl,
-                        isTraktPolling = uiState.isTraktPolling,
-                        isSelfUpdateSupported = uiState.isSelfUpdateSupported,
-                        isCheckingForUpdate = uiState.isCheckingForUpdate,
-                        isAppUpdateAvailable = uiState.isAppUpdateAvailable,
-                        availableAppUpdate = uiState.availableAppUpdate,
-                        downloadedApkPath = uiState.downloadedApkPath,
-                        focusedIndex = if (activeZone == Zone.CONTENT) contentFocusIndex else -1,
-                        onConnectCloud = {if (isTouchDevice) {
+                            onLanguageClick = {
+                                val currentLang = uiState.currentLanguage
+                                val newLang = if (currentLang.startsWith("fr")) "en" else "fr"
+                                viewModel.setLanguage(newLang)
+                            },
+                            currentLanguage = uiState.currentLanguage
+                        )
+
+                        "iptv" -> IptvSettings(
+                            m3uUrl = uiState.iptvM3uUrl,
+                            epgUrl = uiState.iptvEpgUrl,
+                            channelCount = uiState.iptvChannelCount,
+                            isLoading = uiState.isIptvLoading,
+                            error = uiState.iptvError,
+                            statusMessage = uiState.iptvStatusMessage,
+                            statusType = uiState.iptvStatusType,
+                            progressText = uiState.iptvProgressText,
+                            progressPercent = uiState.iptvProgressPercent,
+                            focusedIndex = if (activeZone == Zone.CONTENT) contentFocusIndex else -1,
+                            onConfigure = { showIptvInput = true },
+                            onRefresh = { viewModel.refreshIptv() },
+                            onDelete = { viewModel.clearIptvConfig() }
+                        )
+
+                        "catalogs" -> CatalogsSettings(
+                            catalogs = uiState.catalogs,
+                            focusedIndex = if (activeZone == Zone.CONTENT) contentFocusIndex else -1,
+                            focusedActionIndex = catalogActionIndex,
+                            onAddCatalog = { showCatalogInput = true }
+                        )
+
+                        "addons" -> AddonsSettings(
+                            addons = uiState.addons,
+                            focusedIndex = if (activeZone == Zone.CONTENT) contentFocusIndex else -1,
+                            focusedActionIndex = addonActionIndex,
+                            onToggleAddon = { viewModel.toggleAddon(it) },
+                            onDeleteAddon = { viewModel.removeAddon(it) },
+                            onAddCustomAddon = { showCustomAddonInput = true }
+                        )
+
+                        "accounts" -> AccountsSettings(
+                            isCloudAuthenticated = uiState.isLoggedIn,
+                            cloudEmail = uiState.accountEmail,
+                            cloudHint = null,
+                            isTraktAuthenticated = uiState.isTraktAuthenticated,
+                            traktCode = uiState.traktCode?.userCode,
+                            traktUrl = uiState.traktCode?.verificationUrl,
+                            isTraktPolling = uiState.isTraktPolling,
+                            isSelfUpdateSupported = uiState.isSelfUpdateSupported,
+                            isCheckingForUpdate = uiState.isCheckingForUpdate,
+                            isAppUpdateAvailable = uiState.isAppUpdateAvailable,
+                            availableAppUpdate = uiState.availableAppUpdate,
+                            downloadedApkPath = uiState.downloadedApkPath,
+                            focusedIndex = if (activeZone == Zone.CONTENT) contentFocusIndex else -1,
+                            onConnectCloud = {
+                                if (isTouchDevice) {
                                     viewModel.openCloudEmailPasswordDialog()
                                 } else {
                                     viewModel.startCloudAuth()
@@ -783,7 +838,12 @@ fun SettingsScreen(
                             onCancelTrakt = { viewModel.cancelTraktAuth() },
                             onDisconnectTrakt = { viewModel.disconnectTrakt() },
                             onSwitchProfile = onSwitchProfile,
-                            onCheckUpdates = { viewModel.checkForAppUpdates(force = true, showNoUpdateFeedback = true) },
+                            onCheckUpdates = {
+                                viewModel.checkForAppUpdates(
+                                    force = true,
+                                    showNoUpdateFeedback = true
+                                )
+                            },
                             onInstallUpdate = { viewModel.installAppUpdateOrRequestPermission() }
                         )
                     }
@@ -861,7 +921,10 @@ fun SettingsScreen(
             InputModal(
                 title = stringResource(R.string.catalog_add),
                 fields = listOf(
-                    InputField(label = stringResource(R.string.catalog_url_label), value = catalogInputUrl, onValueChange = { catalogInputUrl = it })
+                    InputField(
+                        label = stringResource(R.string.catalog_url_label),
+                        value = catalogInputUrl,
+                        onValueChange = { catalogInputUrl = it })
                 ),
                 onConfirm = {
                     if (catalogInputUrl.isNotBlank()) {
@@ -881,7 +944,10 @@ fun SettingsScreen(
             InputModal(
                 title = stringResource(R.string.rename_catalog_title),
                 fields = listOf(
-                    InputField(label = stringResource(R.string.catalog_title_label), value = renameCatalogTitle, onValueChange = { renameCatalogTitle = it })
+                    InputField(
+                        label = stringResource(R.string.catalog_title_label),
+                        value = renameCatalogTitle,
+                        onValueChange = { renameCatalogTitle = it })
                 ),
                 onConfirm = {
                     if (renameCatalogTitle.isNotBlank()) {
@@ -932,8 +998,20 @@ fun SettingsScreen(
                 onEmailChange = { cloudDialogEmail = it },
                 onPasswordChange = { cloudDialogPassword = it },
                 onDismiss = { viewModel.closeCloudEmailPasswordDialog() },
-                onSignIn = { viewModel.completeCloudAuthWithEmailPassword(cloudDialogEmail, cloudDialogPassword, createAccount = false) },
-                onCreateAccount = { viewModel.completeCloudAuthWithEmailPassword(cloudDialogEmail, cloudDialogPassword, createAccount = true) }
+                onSignIn = {
+                    viewModel.completeCloudAuthWithEmailPassword(
+                        cloudDialogEmail,
+                        cloudDialogPassword,
+                        createAccount = false
+                    )
+                },
+                onCreateAccount = {
+                    viewModel.completeCloudAuthWithEmailPassword(
+                        cloudDialogEmail,
+                        cloudDialogPassword,
+                        createAccount = true
+                    )
+                }
             )
         }
 
@@ -1032,6 +1110,7 @@ private fun CloudEmailPasswordModal(
                                 onDismiss()
                                 true
                             }
+
                             Key.DirectionUp -> {
                                 focusedIndex = when (focusedIndex) {
                                     1 -> 0
@@ -1040,6 +1119,7 @@ private fun CloudEmailPasswordModal(
                                 }
                                 true
                             }
+
                             Key.DirectionDown -> {
                                 focusedIndex = when (focusedIndex) {
                                     0 -> 1
@@ -1048,6 +1128,7 @@ private fun CloudEmailPasswordModal(
                                 }
                                 true
                             }
+
                             Key.DirectionLeft -> {
                                 focusedIndex = when (focusedIndex) {
                                     4 -> 3
@@ -1056,6 +1137,7 @@ private fun CloudEmailPasswordModal(
                                 }
                                 true
                             }
+
                             Key.DirectionRight -> {
                                 focusedIndex = when (focusedIndex) {
                                     2 -> 3
@@ -1064,14 +1146,25 @@ private fun CloudEmailPasswordModal(
                                 }
                                 true
                             }
+
                             Key.Enter, Key.DirectionCenter -> {
                                 when (focusedIndex) {
-                                    2 -> { onDismiss(); true }
-                                    3 -> { onSignIn(); true }
-                                    4 -> { onCreateAccount(); true }
+                                    2 -> {
+                                        onDismiss(); true
+                                    }
+
+                                    3 -> {
+                                        onSignIn(); true
+                                    }
+
+                                    4 -> {
+                                        onCreateAccount(); true
+                                    }
+
                                     else -> false
                                 }
                             }
+
                             else -> false
                         }
                     } else false
@@ -1289,21 +1382,31 @@ private fun CloudPairModal(
                                     onDismiss()
                                     true
                                 }
+
                                 Key.DirectionLeft -> {
                                     focusedIndex = 0
                                     true
                                 }
+
                                 Key.DirectionRight -> {
                                     focusedIndex = 1
                                     true
                                 }
+
                                 Key.Enter, Key.DirectionCenter -> {
                                     when (focusedIndex) {
-                                        0 -> { onDismiss(); true }
-                                        1 -> { onUseEmailPassword(); true }
+                                        0 -> {
+                                            onDismiss(); true
+                                        }
+
+                                        1 -> {
+                                            onUseEmailPassword(); true
+                                        }
+
                                         else -> false
                                     }
                                 }
+
                                 else -> false
                             }
                         } else false
@@ -1454,7 +1557,9 @@ private fun CloudPairModal(
                         Box(
                             modifier = Modifier
                                 .background(
-                                    color = if (isCancelFocused) Color.White.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.1f),
+                                    color = if (isCancelFocused) Color.White.copy(alpha = 0.2f) else Color.White.copy(
+                                        alpha = 0.1f
+                                    ),
                                     shape = RoundedCornerShape(10.dp)
                                 )
                                 .border(
@@ -1643,15 +1748,20 @@ private fun AppUpdateModal(
                 .onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     when (event.key) {
-                        Key.Back, Key.Escape -> { onDismiss(); true }
+                        Key.Back, Key.Escape -> {
+                            onDismiss(); true
+                        }
+
                         Key.DirectionLeft -> {
                             focusedIndex = (focusedIndex - 1).coerceAtLeast(0)
                             true
                         }
+
                         Key.DirectionRight -> {
                             focusedIndex = (focusedIndex + 1).coerceAtMost(2)
                             true
                         }
+
                         Key.Enter, Key.DirectionCenter -> {
                             when (focusedIndex) {
                                 0 -> onDismiss()
@@ -1662,17 +1772,31 @@ private fun AppUpdateModal(
                             }
                             true
                         }
+
                         else -> false
                     }
                 }
         ) {
-            Text(stringResource(R.string.app_update_modal_title), style = ArflixTypography.sectionTitle, color = TextPrimary)
+            Text(
+                stringResource(R.string.app_update_modal_title),
+                style = ArflixTypography.sectionTitle,
+                color = TextPrimary
+            )
             Spacer(modifier = Modifier.height(10.dp))
 
             val subtitle = when {
                 !isSelfUpdateSupported -> stringResource(R.string.app_update_managed_play)
-                downloadedApkPath != null && update != null -> stringResource(R.string.app_update_ready_install, update.title)
-                isAppUpdateAvailable && update != null -> stringResource(R.string.app_update_available_desc, update.title, update.tag)
+                downloadedApkPath != null && update != null -> stringResource(
+                    R.string.app_update_ready_install,
+                    update.title
+                )
+
+                isAppUpdateAvailable && update != null -> stringResource(
+                    R.string.app_update_available_desc,
+                    update.title,
+                    update.tag
+                )
+
                 update != null -> stringResource(R.string.update_latest_installed)
                 isChecking -> stringResource(R.string.update_checking)
                 else -> stringResource(R.string.update_no_info)
@@ -1701,7 +1825,11 @@ private fun AppUpdateModal(
 
             when {
                 isDownloading -> {
-                    Text(stringResource(R.string.update_downloading), style = ArflixTypography.body, color = TextPrimary)
+                    Text(
+                        stringResource(R.string.update_downloading),
+                        style = ArflixTypography.body,
+                        color = TextPrimary
+                    )
                     Spacer(modifier = Modifier.height(8.dp))
                     androidx.compose.material3.LinearProgressIndicator(
                         progress = progress ?: 0f,
@@ -1716,9 +1844,15 @@ private fun AppUpdateModal(
                         color = TextSecondary
                     )
                 }
+
                 downloadedApkPath != null -> {
-                    Text(stringResource(R.string.update_downloaded_ready), style = ArflixTypography.body, color = TextPrimary)
+                    Text(
+                        stringResource(R.string.update_downloaded_ready),
+                        style = ArflixTypography.body,
+                        color = TextPrimary
+                    )
                 }
+
                 !update?.notes.isNullOrBlank() -> {
                     Text(
                         text = update!!.notes.take(900),
@@ -1784,18 +1918,32 @@ private fun UnknownSourcesModal(
                 .onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     when (event.key) {
-                        Key.Back, Key.Escape -> { onDismiss(); true }
-                        Key.DirectionLeft -> { focusedIndex = 0; true }
-                        Key.DirectionRight -> { focusedIndex = 1; true }
+                        Key.Back, Key.Escape -> {
+                            onDismiss(); true
+                        }
+
+                        Key.DirectionLeft -> {
+                            focusedIndex = 0; true
+                        }
+
+                        Key.DirectionRight -> {
+                            focusedIndex = 1; true
+                        }
+
                         Key.Enter, Key.DirectionCenter -> {
                             if (focusedIndex == 0) onDismiss() else onOpenSettings()
                             true
                         }
+
                         else -> false
                     }
                 }
         ) {
-            Text(stringResource(R.string.allow_unknown_sources), style = ArflixTypography.sectionTitle, color = TextPrimary)
+            Text(
+                stringResource(R.string.allow_unknown_sources),
+                style = ArflixTypography.sectionTitle,
+                color = TextPrimary
+            )
             Spacer(modifier = Modifier.height(12.dp))
             Text(
                 stringResource(R.string.allow_unknown_sources_desc),
@@ -1805,7 +1953,12 @@ private fun UnknownSourcesModal(
             Spacer(modifier = Modifier.height(24.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 UpdateActionButton(stringResource(R.string.button_close), focusedIndex == 0, onDismiss)
-                UpdateActionButton(stringResource(R.string.button_open_settings), focusedIndex == 1, onOpenSettings, highlighted = true)
+                UpdateActionButton(
+                    stringResource(R.string.button_open_settings),
+                    focusedIndex == 1,
+                    onOpenSettings,
+                    highlighted = true
+                )
             }
         }
     }
@@ -1870,7 +2023,7 @@ private fun SettingsSectionItem(
         isSelected -> TextPrimary
         else -> TextSecondary
     }
-    
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1928,7 +2081,9 @@ private fun GeneralSettings(
             icon = Icons.Default.Translate,
             title = stringResource(id = R.string.language),
             subtitle = stringResource(id = R.string.change_app_language),
-            value = if (currentLanguage.startsWith("fr")) stringResource(id = R.string.language_fr) else stringResource(id = R.string.language_en),
+            value = if (currentLanguage.startsWith("fr")) stringResource(id = R.string.language_fr) else stringResource(
+                id = R.string.language_en
+            ),
             isFocused = focusedIndex == 0,
             onClick = onLanguageClick
         )
@@ -1944,7 +2099,7 @@ private fun GeneralSettings(
             isFocused = focusedIndex == 1,
             onClick = onSubtitleClick
         )
-        
+
         Spacer(modifier = Modifier.height(16.dp))
 
         // Default Audio
@@ -1982,7 +2137,7 @@ private fun GeneralSettings(
         )
 
         Spacer(modifier = Modifier.height(16.dp))
-        
+
         // Auto-Play Next
         SettingsToggleRow(
             title = stringResource(id = R.string.auto_play_next_title),
@@ -2044,7 +2199,10 @@ private fun IptvSettings(
             icon = Icons.Default.LiveTv,
             title = stringResource(R.string.iptv_playlist_title),
             subtitle = if (m3uUrl.isBlank()) stringResource(R.string.iptv_playlist_desc_empty) else stringResource(R.string.iptv_playlist_desc_configured),
-            value = if (m3uUrl.isBlank()) stringResource(R.string.not_set) else stringResource(id = R.string.iptv_channels_count, channelCount),
+            value = if (m3uUrl.isBlank()) stringResource(R.string.not_set) else stringResource(
+                id = R.string.iptv_channels_count,
+                channelCount
+            ),
             isFocused = focusedIndex == 0,
             onClick = onConfigure
         )
@@ -2183,7 +2341,7 @@ private fun SettingsRow(
                 )
             }
         }
-        
+
         Text(
             text = value.uppercase(),
             style = ArflixTypography.label,
@@ -2236,7 +2394,7 @@ private fun SettingsToggleRow(
                 overflow = TextOverflow.Ellipsis
             )
         }
-        
+
         // Custom toggle indicator instead of Switch
         Box(
             modifier = Modifier
@@ -2297,13 +2455,16 @@ private fun CatalogsSettings(
         catalogs.forEachIndexed { index, catalog ->
             val rowFocusIndex = index + 1
             val isRowFocused = focusedIndex == rowFocusIndex
-            val title = if (catalog.isPreinstalled) "${catalog.title} ${stringResource(R.string.built_in_suffix)}" else catalog.title
+            val title =
+                if (catalog.isPreinstalled) "${catalog.title} ${stringResource(R.string.built_in_suffix)}" else catalog.title
             val subtitle = when (catalog.sourceType) {
                 CatalogSourceType.PREINSTALLED -> stringResource(R.string.preinstalled_catalog)
                 CatalogSourceType.ADDON -> {
-                    val addonLabel = catalog.addonName?.takeIf { it.isNotBlank() } ?: stringResource(R.string.addons_title)
+                    val addonLabel =
+                        catalog.addonName?.takeIf { it.isNotBlank() } ?: stringResource(R.string.addons_title)
                     stringResource(id = R.string.from_addon, addonLabel)
                 }
+
                 else -> catalog.sourceUrl ?: stringResource(R.string.custom_catalog)
             }
 
@@ -2428,7 +2589,8 @@ private fun AddonsSettings(
             )
         } else {
             addons.forEachIndexed { index, addon ->
-                val canDelete = !(addon.id == "opensubtitles" && addon.type == com.arflix.tv.data.model.AddonType.SUBTITLE)
+                val canDelete =
+                    !(addon.id == "opensubtitles" && addon.type == com.arflix.tv.data.model.AddonType.SUBTITLE)
                 AddonRow(
                     addon = addon,
                     isFocused = focusedIndex == index,
@@ -2695,8 +2857,16 @@ private fun AccountsSettings(
                 !isSelfUpdateSupported -> stringResource(R.string.app_updates_desc_managed)
                 downloadedApkPath != null -> stringResource(R.string.app_updates_desc_ready)
                 isCheckingForUpdate -> stringResource(R.string.app_updates_desc_checking)
-                isAppUpdateAvailable -> stringResource(id = R.string.app_updates_desc_available, availableAppUpdate?.title ?: availableAppUpdate?.tag ?: "latest release")
-                availableAppUpdate != null -> stringResource(id = R.string.app_updates_desc_latest, BuildConfig.VERSION_NAME)
+                isAppUpdateAvailable -> stringResource(
+                    id = R.string.app_updates_desc_available,
+                    availableAppUpdate?.title ?: availableAppUpdate?.tag ?: "latest release"
+                )
+
+                availableAppUpdate != null -> stringResource(
+                    id = R.string.app_updates_desc_latest,
+                    BuildConfig.VERSION_NAME
+                )
+
                 else -> stringResource(R.string.app_updates_desc_check)
             },
             actionLabel = when {
@@ -2902,7 +3072,7 @@ private fun AccountRow(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            
+
             if (isConnected) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -2951,7 +3121,7 @@ private fun AccountRow(
                 }
             }
         }
-        
+
         // Show expiration date when connected
         if (isConnected && expirationText != null) {
             Spacer(modifier = Modifier.height(8.dp))
@@ -3072,30 +3242,35 @@ private fun InputModalLegacy(
                                 onDismiss()
                                 true
                             }
+
                             Key.DirectionUp -> {
                                 if (focusedIndex > 0) {
                                     focusedIndex--
                                 }
                                 true
                             }
+
                             Key.DirectionDown -> {
                                 if (focusedIndex < totalItems - 1) {
                                     focusedIndex++
                                 }
                                 true
                             }
+
                             Key.DirectionLeft -> {
                                 if (focusedIndex == fields.size + 2) {
                                     focusedIndex = fields.size + 1
                                 }
                                 true
                             }
+
                             Key.DirectionRight -> {
                                 if (focusedIndex == fields.size + 1) {
                                     focusedIndex = fields.size + 2
                                 }
                                 true
                             }
+
                             Key.Enter, Key.DirectionCenter -> {
                                 when {
                                     focusedIndex == fields.size -> {
@@ -3106,17 +3281,21 @@ private fun InputModalLegacy(
                                         }
                                         true
                                     }
+
                                     focusedIndex == fields.size + 1 -> {
                                         onDismiss()
                                         true
                                     }
+
                                     focusedIndex == fields.size + 2 -> {
                                         onConfirm()
                                         true
                                     }
+
                                     else -> false // Let text field handle Enter
                                 }
                             }
+
                             else -> false
                         }
                     } else false
@@ -3359,7 +3538,10 @@ private fun InputModal(
                     )
                     .background(BackgroundElevated, RoundedCornerShape(14.dp))
                     .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(14.dp))
-                    .padding(horizontal = if (LocalDeviceType.current.isTouchDevice()) 16.dp else 20.dp, vertical = 18.dp)
+                    .padding(
+                        horizontal = if (LocalDeviceType.current.isTouchDevice()) 16.dp else 20.dp,
+                        vertical = 18.dp
+                    )
                     .focusRequester(modalFocusRequester)
                     .focusable()
                     .onPreviewKeyEvent { event ->
@@ -3374,6 +3556,7 @@ private fun InputModal(
                                     }
                                     true
                                 }
+
                                 Key.DirectionUp -> {
                                     if (focusedIndex > 0) {
                                         if (focusedIndex < fields.size) hideKeyboardAll()
@@ -3381,6 +3564,7 @@ private fun InputModal(
                                     }
                                     true
                                 }
+
                                 Key.DirectionDown -> {
                                     if (focusedIndex < totalItems - 1) {
                                         if (focusedIndex < fields.size) hideKeyboardAll()
@@ -3388,20 +3572,24 @@ private fun InputModal(
                                     }
                                     true
                                 }
+
                                 Key.DirectionLeft -> {
                                     if (focusedIndex == fields.size + 2) focusedIndex = fields.size + 1
                                     true
                                 }
+
                                 Key.DirectionRight -> {
                                     if (focusedIndex == fields.size + 1) focusedIndex = fields.size + 2
                                     true
                                 }
+
                                 Key.Enter, Key.DirectionCenter -> {
                                     when {
                                         focusedIndex in 0 until fields.size -> {
                                             showKeyboardFor(focusedIndex)
                                             true
                                         }
+
                                         focusedIndex == fields.size -> {
                                             val clipboardText = clipboardManager.getText()?.text
                                             val target = fields.firstOrNull()
@@ -3410,19 +3598,23 @@ private fun InputModal(
                                             }
                                             true
                                         }
+
                                         focusedIndex == fields.size + 1 -> {
                                             hideKeyboardAll()
                                             onDismiss()
                                             true
                                         }
+
                                         focusedIndex == fields.size + 2 -> {
                                             hideKeyboardAll()
                                             onConfirm()
                                             true
                                         }
+
                                         else -> false
                                     }
                                 }
+
                                 else -> false
                             }
                         } else false
@@ -3486,7 +3678,10 @@ private fun InputModal(
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .background(Color.White.copy(alpha = if (isFocused) 0.12f else 0.05f), RoundedCornerShape(10.dp))
+                                    .background(
+                                        Color.White.copy(alpha = if (isFocused) 0.12f else 0.05f),
+                                        RoundedCornerShape(10.dp)
+                                    )
                                     .border(
                                         width = if (isFocused) 2.dp else 1.dp,
                                         color = if (isFocused) Pink else Color.White.copy(alpha = 0.2f),
@@ -3509,12 +3704,13 @@ private fun InputModal(
                                             isFocusable = true
                                             isFocusableInTouchMode = true
 
-                                            val isPasswordField = field.isSecret || field.label.contains("password", ignoreCase = true)
+                                            val isPasswordField =
+                                                field.isSecret || field.label.contains("password", ignoreCase = true)
                                             val isLikelyUrlField =
                                                 field.label.contains("url", ignoreCase = true) ||
-                                                    field.label.contains("m3u", ignoreCase = true) ||
-                                                    field.label.contains("epg", ignoreCase = true) ||
-                                                    field.label.contains("server", ignoreCase = true)
+                                                        field.label.contains("m3u", ignoreCase = true) ||
+                                                        field.label.contains("epg", ignoreCase = true) ||
+                                                        field.label.contains("server", ignoreCase = true)
                                             inputType = if (isPasswordField) {
                                                 InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
                                             } else if (isLikelyUrlField) {
@@ -3532,7 +3728,8 @@ private fun InputModal(
 
                                             setOnEditorActionListener { _, actionId, _ ->
                                                 if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE) {
-                                                    val imm = ctx.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+                                                    val imm =
+                                                        ctx.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? InputMethodManager
                                                     imm?.hideSoftInputFromWindow(windowToken, 0)
                                                     clearFocus()
                                                     true
@@ -3663,7 +3860,9 @@ private fun InputModal(
 
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
-                    text =if (LocalDeviceType.current.isTouchDevice()) "Tap a field to edit, tap Confirm when done" else stringResource(R.string.input_modal_footer),
+                    text = if (LocalDeviceType.current.isTouchDevice()) "Tap a field to edit, tap Confirm when done" else stringResource(
+                        R.string.input_modal_footer
+                    ),
                     style = ArflixTypography.caption,
                     color = TextSecondary.copy(alpha = 0.56f)
                 )
@@ -3709,20 +3908,24 @@ private fun SubtitlePickerModal(
                             onDismiss()
                             true
                         }
+
                         Key.DirectionUp -> {
                             if (safeIndex > 0) onFocusChange(safeIndex - 1)
                             true
                         }
+
                         Key.DirectionDown -> {
                             if (safeIndex < options.size - 1) onFocusChange(safeIndex + 1)
                             true
                         }
+
                         Key.Enter, Key.DirectionCenter -> {
                             if (options.isNotEmpty()) {
                                 onSelect(options[safeIndex])
                             }
                             true
                         }
+
                         else -> false
                     }
                 } else false

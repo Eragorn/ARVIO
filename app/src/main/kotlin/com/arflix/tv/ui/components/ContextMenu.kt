@@ -331,7 +331,7 @@ fun ContextMenu(
                                     modifier = Modifier.size(24.dp)
                                 )
                                 Text(
-                                    text = action.label,
+                                    text = stringResource(action.labelResId),
                                     style = ArflixTypography.body,
                                     color = TextPrimary
                                 )
