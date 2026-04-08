@@ -2,8 +2,6 @@ package com.arflix.tv.ui.screens.settings
 
 import android.content.Context
 import coil.Coil
-import com.arflix.tv.BuildConfig
-import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -11,7 +9,6 @@ import com.arflix.tv.R
 import com.arflix.tv.data.api.TraktDeviceCode
 import com.arflix.tv.data.model.Addon
 import com.arflix.tv.data.model.CatalogConfig
-import com.arflix.tv.data.model.Profile
 import com.arflix.tv.data.repository.AuthRepository
 import com.arflix.tv.data.repository.AuthState
 import com.arflix.tv.data.repository.CatalogRepository
@@ -31,7 +28,6 @@ import com.arflix.tv.data.repository.TraktSyncService
 import com.arflix.tv.data.repository.WatchlistRepository
 import com.arflix.tv.network.OkHttpProvider
 import com.arflix.tv.data.repository.SyncProgress
-import com.arflix.tv.data.repository.SyncStatus
 import com.arflix.tv.data.repository.SyncResult
 import com.arflix.tv.ui.components.CARD_LAYOUT_MODE_LANDSCAPE
 import com.arflix.tv.ui.components.normalizeCardLayoutMode
@@ -41,6 +37,9 @@ import com.arflix.tv.updater.AppUpdate
 import com.arflix.tv.updater.AppUpdateRepository
 import com.arflix.tv.updater.UpdatePreferences
 import com.arflix.tv.updater.VersionUtils
+import com.arflix.tv.util.APP_LANGUAGE_KEY
+import com.arflix.tv.util.DEVICE_MODE_OVERRIDE_KEY
+import com.arflix.tv.util.SKIP_PROFILE_SELECTION_KEY
 import com.arflix.tv.util.settingsDataStore
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -141,7 +140,8 @@ data class SettingsUiState(
     val clockFormat: String = "24h",
     // Toast
     val toastMessage: String? = null,
-    val toastType: ToastType = ToastType.INFO
+    val toastType: ToastType = ToastType.INFO,
+    val appLanguage: String = "en-US"
 )
 
 @HiltViewModel
@@ -169,6 +169,7 @@ class SettingsViewModel @Inject constructor(
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
 
     private fun contentLanguageKey() = profileManager.profileStringKey("content_language")
+    private fun appLanguageKey() = profileManager.profileStringKey("app_language")
 
     private fun defaultSubtitleKey() = profileManager.profileStringKey("default_subtitle")
     private fun defaultSubtitleKeyFor(profileId: String) = profileManager.profileStringKeyFor(profileId, "default_subtitle")
@@ -261,9 +262,10 @@ class SettingsViewModel @Inject constructor(
             val defaultAudio = prefs[defaultAudioLanguageKey()] ?: "Auto (Original)"
             val cardLayoutMode = normalizeCardLayoutMode(prefs[cardLayoutModeKey()])
             val frameRateMode = normalizeFrameRateMode(prefs[frameRateMatchingModeKey()])
-            val deviceModeOverride = prefs[com.arflix.tv.util.DEVICE_MODE_OVERRIDE_KEY] ?: "auto"
-            val skipProfileSelection = prefs[com.arflix.tv.util.SKIP_PROFILE_SELECTION_KEY] ?: false
+            val deviceModeOverride = prefs[DEVICE_MODE_OVERRIDE_KEY] ?: "auto"
+            val skipProfileSelection = prefs[SKIP_PROFILE_SELECTION_KEY] ?: false
             val contentLang = prefs[contentLanguageKey()] ?: "en-US"
+            val appLang = prefs[appLanguageKey()] ?: prefs[APP_LANGUAGE_KEY] ?: "en"
             // Apply content language to MediaRepository immediately
             mediaRepository.contentLanguage = if (contentLang == "en-US") null else contentLang
             var autoPlay = prefs[autoPlayNextKey()] ?: true
@@ -349,6 +351,7 @@ class SettingsViewModel @Inject constructor(
                 catalogs = existingCatalogs,
                 addons = addons,
                 contentLanguage = contentLang,
+                appLanguage = appLang,
                 deviceModeOverride = deviceModeOverride,
                 skipProfileSelection = skipProfileSelection,
                 clockFormat = clockFormat
@@ -746,11 +749,27 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    /** Set UI mode override: "auto", "tv", "tablet", "phone". Requires app restart. */
+    fun setAppLanguage(lang: String) {
+        viewModelScope.launch {
+            context.settingsDataStore.edit { prefs ->
+                prefs[appLanguageKey()] = lang
+                prefs[APP_LANGUAGE_KEY] = lang
+            }
+
+            _uiState.value = _uiState.value.copy(
+                appLanguage = lang,
+                toastMessage = context.getString(R.string.language_changed),
+                toastType = ToastType.SUCCESS
+            )
+            syncLocalStateToCloud(silent = true)
+        }
+    }
+
+    /** Set UI mode override: "auto", "tv", "tablet", "phone". Applies immediately. */
     fun setDeviceModeOverride(mode: String) {
         viewModelScope.launch {
             context.settingsDataStore.edit { prefs ->
-                prefs[com.arflix.tv.util.DEVICE_MODE_OVERRIDE_KEY] = mode
+                prefs[DEVICE_MODE_OVERRIDE_KEY] = mode
             }
             _uiState.value = _uiState.value.copy(deviceModeOverride = mode)
         }
@@ -759,7 +778,7 @@ class SettingsViewModel @Inject constructor(
     fun setSkipProfileSelection(skip: Boolean) {
         viewModelScope.launch {
             context.settingsDataStore.edit { prefs ->
-                prefs[com.arflix.tv.util.SKIP_PROFILE_SELECTION_KEY] = skip
+                prefs[SKIP_PROFILE_SELECTION_KEY] = skip
             }
             _uiState.value = _uiState.value.copy(skipProfileSelection = skip)
         }

@@ -1,5 +1,8 @@
 package com.arflix.tv.data.repository
 
+import android.content.Context
+import com.arflix.tv.R
+import com.arflix.tv.data.api.StremioMetaPreview
 import com.arflix.tv.data.api.TmdbApi
 import com.arflix.tv.data.api.TmdbCastMember
 import com.arflix.tv.data.api.TmdbEpisode
@@ -789,7 +792,8 @@ class MediaRepository @Inject constructor(
             tmdbApi.findByExternalId(
                 externalId = normalizedImdb,
                 apiKey = apiKey,
-                externalSource = "imdb_id"
+                externalSource = "imdb_id",
+                language = contentLanguage
             )
         }.getOrNull()
 
@@ -1139,11 +1143,14 @@ class MediaRepository @Inject constructor(
         if (logoCache.containsKey(cacheKey)) {
             getFromCache(logoCache, cacheKey)?.let { return it }
         }
-
+        val langCode = contentLanguage?.take(2)
+        val includeLang = if (langCode == "en") "en,null" else "$langCode,en,null"
         val type = if (mediaType == MediaType.TV) "tv" else "movie"
         return try {
-            val images = tmdbApi.getImages(type, mediaId, apiKey)
-            val logo = images.logos.find { it.iso6391 == "en" } ?: images.logos.firstOrNull()
+            val images = tmdbApi.getImages(type, mediaId, apiKey, includeImageLanguage = includeLang)
+            val logo = images.logos.find { it.iso6391 == langCode }
+                ?: images.logos.find { it.iso6391 == "en" }
+                ?: images.logos.firstOrNull()
             val url = logo?.filePath?.let { "${Constants.LOGO_BASE}$it" }
             logoCache[cacheKey] = CacheEntry(url, System.currentTimeMillis())
             url

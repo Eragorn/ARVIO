@@ -185,6 +185,8 @@ fun SettingsScreen(
     var contentLanguagePickerIndex by remember { mutableIntStateOf(0) }
     var showUiModeWarningDialog by remember { mutableStateOf(false) }
     var nextUiMode by remember { mutableStateOf("") }
+    var showAppLanguagePicker by remember { mutableStateOf(false) }
+    var appLanguagePickerIndex by remember { mutableIntStateOf(0) }
 
     val sections = remember { listOf("general", "iptv", "catalogs", "addons", "accounts") }
 
@@ -222,6 +224,10 @@ fun SettingsScreen(
             else -> "auto"
         }
         showUiModeWarningDialog = true
+    }
+    val openAppLanguagePicker = {
+        appLanguagePickerIndex = LANGUAGES.indexOfFirst { it.first == uiState.appLanguage }.coerceAtLeast(0)
+        showAppLanguagePicker = true
     }
 
     LaunchedEffect(Unit) {
@@ -269,7 +275,7 @@ fun SettingsScreen(
         if (scrollState.maxValue <= 0) return@LaunchedEffect
 
         val maxIndex = when (sectionIndex) {
-            0 -> 16 // General: 17 items (+ Clock Format)
+            0 -> 17 // General: 18 items (+ Clock Format)
             1 -> 2 + uiState.iptvPlaylists.size // IPTV: Add + playlist rows + Refresh + Delete
             2 -> uiState.catalogs.size // Catalogs
             3 -> uiState.addons.size // Addons
@@ -347,6 +353,7 @@ fun SettingsScreen(
         showDnsProviderPicker ||
         showContentLanguagePicker ||
         showUiModeWarningDialog ||
+        showAppLanguagePicker ||
         uiState.showCloudPairDialog ||
         uiState.showCloudEmailPasswordDialog ||
         uiState.showAppUpdateDialog ||
@@ -484,7 +491,7 @@ fun SettingsScreen(
                                 Zone.CONTENT -> {
                                     // Dynamic max based on current section
                                     val maxIndex = when (sectionIndex) {
-                                        0 -> 16 // General: 17 items (+ Clock Format)
+                                        0 -> 17 // General: 17 items (+ Clock Format)
                                         1 -> 2 + uiState.iptvPlaylists.size // IPTV dynamic rows
                                         2 -> uiState.catalogs.size // Catalogs: Add + N catalogs
                                         3 -> uiState.addons.size // Addons: N addons + "Add Custom" button
@@ -533,12 +540,14 @@ fun SettingsScreen(
                                                 8 -> viewModel.setTrailerAutoPlay(!uiState.trailerAutoPlay)
                                                 9 -> viewModel.cycleFrameRateMatchingMode()
                                                 10 -> viewModel.toggleCardLayoutMode()
-                                                11 -> openUiModeWarningDialog()
-                                                12 -> viewModel.setSkipProfileSelection(!uiState.skipProfileSelection)
-                                                13 -> viewModel.cycleClockFormat()
-                                                14 -> viewModel.setShowBudget(!uiState.showBudget)
-                                                15 -> openDnsProviderPicker()
-                                                16 -> viewModel.cycleVolumeBoost()
+                                                11 -> openAppLanguagePicker();
+                                                12 -> openUiModeWarningDialog()
+                                                13 -> viewModel.setSkipProfileSelection(!uiState.skipProfileSelection)
+                                                14 -> viewModel.cycleClockFormat()
+                                                15 -> viewModel.setShowBudget(!uiState.showBudget)
+                                                16 -> openDnsProviderPicker()
+                                                17 -> viewModel.cycleVolumeBoost()
+
                                             }
                                         }
                                         1 -> { // IPTV
@@ -685,6 +694,7 @@ fun SettingsScreen(
                             defaultSubtitle = uiState.defaultSubtitle,
                             defaultAudioLanguage = uiState.defaultAudioLanguage,
                             contentLanguage = uiState.contentLanguage,
+                            appLanguage = uiState.appLanguage,
                             dnsProvider = uiState.dnsProvider,
                             cardLayoutMode = uiState.cardLayoutMode,
                             frameRateMatchingMode = uiState.frameRateMatchingMode,
@@ -711,6 +721,7 @@ fun SettingsScreen(
                             onTrailerAutoPlayToggle = { viewModel.setTrailerAutoPlay(it) },
                             onDeviceModeClick = openUiModeWarningDialog,
                             onContentLanguageClick = openContentLanguagePicker,
+                            onAppLanguageClick = openAppLanguagePicker,
                             onSubtitleSizeClick = { viewModel.cycleSubtitleSize() },
                             onSkipProfileSelectionToggle = { viewModel.setSkipProfileSelection(it) },
                             onClockFormatClick = { viewModel.cycleClockFormat() },
@@ -865,10 +876,10 @@ fun SettingsScreen(
                                 activeZone = Zone.SECTION
                             }
                         )
-                        
+
                         Spacer(modifier = Modifier.height(8.dp))
                     }
-                    
+
                     Spacer(modifier = Modifier.weight(1f))
                     
                     Text(
@@ -898,6 +909,7 @@ fun SettingsScreen(
                             autoPlaySingleSource = uiState.autoPlaySingleSource,
                             autoPlayMinQuality = uiState.autoPlayMinQuality,
                             contentLanguage = uiState.contentLanguage,
+                            appLanguage = uiState.appLanguage,
                             subtitleSize = uiState.subtitleSize,
                             subtitleColor = uiState.subtitleColor,
                             deviceModeOverride = uiState.deviceModeOverride,
@@ -1210,6 +1222,22 @@ fun SettingsScreen(
                     showContentLanguagePicker = false
                 },
                 onDismiss = { showContentLanguagePicker = false }
+            )
+        }
+
+        if (showAppLanguagePicker) {
+            SubtitlePickerModal(
+                title = stringResource(R.string.app_language_title),
+                options = LANGUAGES.map { stringResource(it.second) },
+                selected = LANGUAGES.firstOrNull { it.first.startsWith(uiState.appLanguage) }?.let { stringResource(it.second) } ?: "English",
+                focusedIndex = appLanguagePickerIndex,
+                onFocusChange = { appLanguagePickerIndex = it },
+                onSelect = { index, _ ->
+                    val code = LANGUAGES.getOrNull(index)?.first ?: "en-US"
+                    viewModel.setAppLanguage(code)
+                    showAppLanguagePicker = false
+                },
+                onDismiss = { showAppLanguagePicker = false }
             )
         }
 
@@ -2277,6 +2305,7 @@ private fun GeneralSettings(
     subtitleSize: String = "Medium",
     subtitleColor: String = "White",
     deviceModeOverride: String = "auto",
+    appLanguage: String = "en-US",
     skipProfileSelection: Boolean = false,
     clockFormat: String = "24h",
     showBudget: Boolean = true,
@@ -2292,6 +2321,7 @@ private fun GeneralSettings(
     onAutoPlayMinQualityClick: () -> Unit,
     onDeviceModeClick: () -> Unit = {},
     onContentLanguageClick: () -> Unit = {},
+    onAppLanguageClick: () -> Unit = {},
     onSkipProfileSelectionToggle: (Boolean) -> Unit = {},
     onClockFormatClick: () -> Unit = {},
     onShowBudgetToggle: (Boolean) -> Unit = {},
@@ -2422,6 +2452,15 @@ private fun GeneralSettings(
             value = cardLayoutMode,
             isFocused = focusedIndex == 10,
             onClick = onCardLayoutToggle
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+        SettingsRow(
+            icon = Icons.Default.Subtitles,
+            title = stringResource(R.string.app_language_title),
+            subtitle = stringResource(R.string.app_language_desc),
+            value = LANGUAGES.firstOrNull { it.first == appLanguage }?.let { stringResource(it.second) } ?: appLanguage,
+            isFocused = focusedIndex == 11,
+            onClick = onAppLanguageClick
         )
         Spacer(modifier = Modifier.height(10.dp))
         SettingsRow(

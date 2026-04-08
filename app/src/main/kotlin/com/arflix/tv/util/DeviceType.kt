@@ -34,6 +34,9 @@ val DEVICE_MODE_OVERRIDE_KEY = stringPreferencesKey("device_mode_override")
 /** Key for skipping profile selection on startup */
 val SKIP_PROFILE_SELECTION_KEY = booleanPreferencesKey("skip_profile_selection")
 
+/** Key for the application interface language */
+val APP_LANGUAGE_KEY = stringPreferencesKey("app_language")
+
 /** Values: "auto" (default), "tv", "tablet", "phone" */
 fun detectDeviceType(context: Context): DeviceType {
     // Check for user override first

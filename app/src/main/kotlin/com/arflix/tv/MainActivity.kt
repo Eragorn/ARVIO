@@ -1,13 +1,13 @@
 package com.arflix.tv
 
+import android.content.pm.ActivityInfo
 import android.os.Bundle
 import android.view.ViewTreeObserver
 import android.view.WindowManager
-import com.arflix.tv.R
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
-import androidx.compose.animation.core.Animatable
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -16,22 +16,17 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -40,46 +35,26 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.core.os.LocaleListCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import com.arflix.tv.ui.components.AppBottomBar
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import android.content.pm.ActivityInfo
-import com.arflix.tv.util.DeviceType
-import com.arflix.tv.util.DEVICE_MODE_OVERRIDE_KEY
-import com.arflix.tv.util.SKIP_PROFILE_SELECTION_KEY
-import com.arflix.tv.util.LocalDeviceType
-import com.arflix.tv.util.LocalHasTouchScreen
-import com.arflix.tv.util.detectDeviceType
-import com.arflix.tv.util.deviceHasTouchScreen
-import com.arflix.tv.util.settingsDataStore
-import androidx.datastore.preferences.core.Preferences
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.lifecycleScope
 import androidx.metrics.performance.JankStats
 import androidx.metrics.performance.PerformanceMetricsState
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.tv.material3.ExperimentalTvMaterial3Api
-import androidx.tv.material3.Text
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.OutOfQuotaPolicy
@@ -94,20 +69,31 @@ import com.arflix.tv.data.repository.TraktRepository
 import com.arflix.tv.data.repository.toLauncherContinueWatchingRequest
 import com.arflix.tv.navigation.AppNavigation
 import com.arflix.tv.navigation.Screen
-import com.arflix.tv.ui.screens.login.LoginScreen
+import com.arflix.tv.ui.components.AppBottomBar
 import com.arflix.tv.ui.startup.StartupViewModel
 import com.arflix.tv.ui.theme.ArflixTvTheme
 import com.arflix.tv.ui.theme.BackgroundGradientCenter
 import com.arflix.tv.ui.theme.BackgroundGradientEnd
 import com.arflix.tv.ui.theme.BackgroundGradientStart
+import com.arflix.tv.util.APP_LANGUAGE_KEY
+import com.arflix.tv.util.DEVICE_MODE_OVERRIDE_KEY
+import com.arflix.tv.util.DeviceType
+import com.arflix.tv.util.LocalDeviceType
+import com.arflix.tv.util.LocalHasTouchScreen
+import com.arflix.tv.util.SKIP_PROFILE_SELECTION_KEY
+import com.arflix.tv.util.detectDeviceType
+import com.arflix.tv.util.deviceHasTouchScreen
+import com.arflix.tv.util.settingsDataStore
 import com.arflix.tv.worker.TraktSyncWorker
-import dagger.hilt.android.AndroidEntryPoint
 import dagger.Lazy
-import kotlinx.coroutines.launch
+import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
-import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.sin
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import java.util.Locale
 
 /**
  * Main Activity - Single activity architecture with Compose Navigation
@@ -139,6 +125,8 @@ class MainActivity : ComponentActivity() {
         // Don't use setKeepOnScreenCondition - it causes black screen on some TV devices
         // Instead, let the splash dismiss immediately and show our Compose loading screen
         installSplashScreen()
+
+        installAppLanguage()
 
         // Detect device type before super.onCreate().
         // The splash screen's postSplashScreenTheme is Theme.ArflixTV.Mobile (no fullscreen)
@@ -190,9 +178,24 @@ class MainActivity : ComponentActivity() {
         setContent {
             // Observe device mode override changes live from DataStore
             val deviceModeOverride by remember { this@MainActivity.settingsDataStore.data.map { it[DEVICE_MODE_OVERRIDE_KEY] } }.collectAsState(initial = null)
+            val appLanguage by remember { this@MainActivity.settingsDataStore.data.map { it[APP_LANGUAGE_KEY] } }.collectAsState(initial = null)
             val skipProfileSelection by remember {
                 this@MainActivity.settingsDataStore.data.map { it[SKIP_PROFILE_SELECTION_KEY] ?: false }
             }.collectAsState(initial = null as Boolean?)
+
+            // Track the language applied in this activity instance to avoid recreation loops
+            var appliedLanguage by remember { mutableStateOf<String?>(null) }
+
+            LaunchedEffect(appLanguage) {
+                appLanguage?.let { lang ->
+                    if (appliedLanguage != null && appliedLanguage != lang) {
+                        val appLocale = LocaleListCompat.forLanguageTags(lang.split("-").first())
+                        AppCompatDelegate.setApplicationLocales(appLocale)
+                        recreate()
+                    }
+                    appliedLanguage = lang
+                }
+            }
             val activeProfileLoaded by remember {
                 profileRepository.get().activeProfileId.map { true }
             }.collectAsState(initial = false)
@@ -247,6 +250,25 @@ class MainActivity : ComponentActivity() {
                 authRepository.get().checkAuthState()
             }
             ArflixApplication.instance.scheduleTraktSyncIfNeeded()
+        }
+    }
+
+    private fun installAppLanguage() {
+        val savedLanguage = runBlocking {
+            settingsDataStore.data
+                .map { it[APP_LANGUAGE_KEY] }
+                .firstOrNull()
+        }
+
+        savedLanguage?.let { languageTag ->
+            val locales = LocaleListCompat.forLanguageTags(languageTag)
+            AppCompatDelegate.setApplicationLocales(locales)
+            val locale = Locale.forLanguageTag(languageTag)
+            Locale.setDefault(locale)
+            val config = resources.configuration
+            config.setLocale(locale)
+            @Suppress("DEPRECATION")
+            resources.updateConfiguration(config, resources.displayMetrics)
         }
     }
 

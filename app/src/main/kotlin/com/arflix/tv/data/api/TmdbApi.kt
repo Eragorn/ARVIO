@@ -106,7 +106,8 @@ interface TmdbApi {
     suspend fun getImages(
         @Path("media_type") mediaType: String,
         @Path("id") id: Int,
-        @Query("api_key") apiKey: String
+        @Query("api_key") apiKey: String,
+        @Query("include_image_language") includeImageLanguage: String = "en,null"
     ): TmdbImagesResponse
     
     @GET("{media_type}/{id}/videos")
@@ -161,7 +162,8 @@ interface TmdbApi {
     suspend fun findByExternalId(
         @Path("external_id") externalId: String,
         @Query("api_key") apiKey: String,
-        @Query("external_source") externalSource: String = "imdb_id"
+        @Query("external_source") externalSource: String = "imdb_id",
+        @Query("language") language: String? = null
     ): TmdbFindResponse
 
     @GET("{media_type}/{id}/reviews")
