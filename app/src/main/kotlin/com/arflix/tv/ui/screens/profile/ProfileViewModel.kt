@@ -10,13 +10,20 @@ import com.arflix.tv.data.repository.ProfileRepository
 import com.arflix.tv.data.repository.TraktRepository
 import com.arflix.tv.data.repository.WatchlistRepository
 import com.arflix.tv.data.repository.IptvRepository
+import com.arflix.tv.data.repository.MediaRepository
+import com.arflix.tv.util.settingsDataStore
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import android.content.Context
+import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
 
 data class ProfileUiState(
@@ -41,7 +48,9 @@ class ProfileViewModel @Inject constructor(
     private val traktRepository: TraktRepository,
     private val watchlistRepository: WatchlistRepository,
     private val iptvRepository: IptvRepository,
-    private val cloudSyncRepository: CloudSyncRepository
+    private val cloudSyncRepository: CloudSyncRepository,
+    private val mediaRepository: MediaRepository,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProfileUiState())
@@ -94,11 +103,20 @@ class ProfileViewModel @Inject constructor(
         traktRepository.clearAllProfileCaches()
         watchlistRepository.clearWatchlistCache()
         iptvRepository.invalidateCache()
+        mediaRepository.clearCache()
 
         // Update ProfileManager's cache with the new profile ID
         // This ensures all profile-scoped keys use the correct prefix immediately
         profileManager.setCurrentProfileId(profile.id)
         profileManager.setCurrentProfileName(profile.name)
+
+        // Update MediaRepository language for the new profile IMMEDIATELY
+        // This MUST be done before navigation to Home to avoid race conditions.
+        runBlocking {
+            val prefs = context.settingsDataStore.data.first()
+            val contentLang = prefs[stringPreferencesKey("profile_${profile.id}_content_language")] ?: "en-US"
+            mediaRepository.contentLanguage = if (contentLang == "en-US") null else contentLang
+        }
 
         // Activate preloaded cache for instant Continue Watching display
         // This transfers any preloaded data to the active cache before HomeViewModel loads
@@ -137,6 +155,7 @@ class ProfileViewModel @Inject constructor(
         traktRepository.clearAllProfileCaches()
         watchlistRepository.clearWatchlistCache()
         iptvRepository.invalidateCache()
+        mediaRepository.clearCache()
 
         viewModelScope.launch {
             profileRepository.clearActiveProfile()

@@ -10,12 +10,10 @@ import com.arflix.tv.data.api.TmdbListResponse
 import com.arflix.tv.data.api.TmdbMediaItem
 import com.arflix.tv.data.api.TmdbMovieDetails
 import com.arflix.tv.data.api.TmdbPersonDetails
-import com.arflix.tv.data.api.TmdbSeasonDetails
 import com.arflix.tv.data.api.TmdbTvDetails
 import com.arflix.tv.data.api.TmdbWatchProviderRegion
 import com.arflix.tv.data.api.TraktApi
 import com.arflix.tv.data.api.TraktPublicListItem
-import com.arflix.tv.data.api.StremioMetaPreview
 import com.arflix.tv.data.model.CastMember
 import com.arflix.tv.data.model.CatalogConfig
 import com.arflix.tv.data.model.CatalogSourceType
@@ -27,12 +25,16 @@ import com.arflix.tv.data.model.PersonDetails
 import com.arflix.tv.data.model.Review
 import com.arflix.tv.util.CatalogUrlParser
 import com.arflix.tv.util.Constants
+import com.arflix.tv.util.ParsedCatalogUrl
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
+import dagger.hilt.android.qualifiers.ApplicationContext
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.net.URLDecoder
@@ -40,9 +42,6 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
-import com.arflix.tv.util.ParsedCatalogUrl
-import javax.inject.Inject
-import javax.inject.Singleton
 
 data class StreamingServiceInfo(
     val id: Int,
@@ -62,6 +61,7 @@ data class StreamingServicesResult(
  */
 @Singleton
 class MediaRepository @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val tmdbApi: TmdbApi,
     private val traktRepository: TraktRepository,
     private val traktApi: TraktApi,
@@ -100,6 +100,19 @@ class MediaRepository @Inject constructor(
     private val imdbIdCache = ConcurrentHashMap<String, String>()
     private val addonImdbToTmdbCache = ConcurrentHashMap<String, CacheEntry<Pair<MediaType, Int>?>>()
     private val addonTitleToTmdbCache = ConcurrentHashMap<String, CacheEntry<Pair<MediaType, Int>?>>()
+
+    fun clearCache() {
+        detailsCache.clear()
+        castCache.clear()
+        similarCache.clear()
+        logoCache.clear()
+        reviewsCache.clear()
+        watchProvidersCache.clear()
+        seasonEpisodesCache.clear()
+        imdbIdCache.clear()
+        addonImdbToTmdbCache.clear()
+        addonTitleToTmdbCache.clear()
+    }
 
     private fun <T> getFromCache(cache: Map<String, CacheEntry<T>>, key: String): T? {
         val entry = cache[key] ?: return null
@@ -165,32 +178,31 @@ class MediaRepository @Inject constructor(
 
     fun getDefaultCatalogConfigs(): List<CatalogConfig> {
         return listOf(
-            CatalogConfig("favorite_tv", "Favorite TV", CatalogSourceType.PREINSTALLED, isPreinstalled = true),
-            CatalogConfig("trending_movies", "Trending in Movies", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/trending-movies", sourceRef = "mdblist:https://mdblist.com/lists/snoak/trending-movies"),
-            CatalogConfig("trending_tv", "Trending in Shows", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/trakt-s-trending-shows", sourceRef = "mdblist:https://mdblist.com/lists/snoak/trakt-s-trending-shows"),
-            CatalogConfig("trending_anime", "Trending in Anime", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/trending-anime-shows", sourceRef = "mdblist:https://mdblist.com/lists/snoak/trending-anime-shows"),
-            CatalogConfig("top10_movies_today", "Top 10 Movies Today", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/top-10-movies-of-the-day", sourceRef = "mdblist:https://mdblist.com/lists/snoak/top-10-movies-of-the-day"),
-            CatalogConfig("top10_shows_today", "Top 10 Shows Today", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/top-10-shows-of-the-day", sourceRef = "mdblist:https://mdblist.com/lists/snoak/top-10-shows-of-the-day"),
-            CatalogConfig("just_added", "Just Added", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/latest-movies-digital-release", sourceRef = "mdblist:https://mdblist.com/lists/snoak/latest-movies-digital-release"),
-            CatalogConfig("top_movies_week", "Top Movies This Week", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/linaspurinis/top-watched-movies-of-the-week", sourceRef = "mdblist:https://mdblist.com/lists/linaspurinis/top-watched-movies-of-the-week"),
-            CatalogConfig("trending_netflix_movies", "Trending Movies on Netflix", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/netflix-top-10-movies", sourceRef = "mdblist:https://mdblist.com/lists/snoak/netflix-top-10-movies"),
-            CatalogConfig("trending_netflix_shows", "Trending Shows on Netflix", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/netflix-top-10-shows", sourceRef = "mdblist:https://mdblist.com/lists/snoak/netflix-top-10-shows"),
-            CatalogConfig("trending_prime_movies", "Trending Movies on Prime", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/amazon-prime-top-10-shows", sourceRef = "mdblist:https://mdblist.com/lists/snoak/amazon-prime-top-10-shows"),
-            CatalogConfig("trending_prime_shows", "Trending Shows on Prime", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/amazon-prime-top-10-tv-shows", sourceRef = "mdblist:https://mdblist.com/lists/snoak/amazon-prime-top-10-tv-shows"),
-            CatalogConfig("trending_max_movies", "Trending Movies on Max", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/hbo-top-10-movies-2", sourceRef = "mdblist:https://mdblist.com/lists/snoak/hbo-top-10-movies-2"),
-            CatalogConfig("trending_max_shows", "Trending Shows on Max", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/hbo-top-10-tv-shows", sourceRef = "mdblist:https://mdblist.com/lists/snoak/hbo-top-10-tv-shows"),
-            CatalogConfig("trending_disney_movies", "Trending Movies on Disney+", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/disney-plus-top-10-movies", sourceRef = "mdblist:https://mdblist.com/lists/snoak/disney-plus-top-10-movies"),
-            CatalogConfig("trending_disney_shows", "Trending Shows on Disney+", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/disney-plus-top-10-tv-shows", sourceRef = "mdblist:https://mdblist.com/lists/snoak/disney-plus-top-10-tv-shows"),
-            CatalogConfig("trending_paramount_movies", "Trending Movies on Paramount+", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/paramount-plus-top-10-movies", sourceRef = "mdblist:https://mdblist.com/lists/snoak/paramount-plus-top-10-movies"),
-            CatalogConfig("trending_paramount_shows", "Trending Shows on Paramount+", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/paramount-plus-top-10-tv-shows", sourceRef = "mdblist:https://mdblist.com/lists/snoak/paramount-plus-top-10-tv-shows"),
-            CatalogConfig("trending_apple_movies", "Trending Movies on Apple TV+", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/apple-tv-top-10-movies", sourceRef = "mdblist:https://mdblist.com/lists/snoak/apple-tv-top-10-movies"),
-            CatalogConfig("trending_apple_shows", "Trending Shows on Apple TV+", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/apple-tv-top-10-tv-shows", sourceRef = "mdblist:https://mdblist.com/lists/snoak/apple-tv-top-10-tv-shows"),
-            CatalogConfig("new_kdramas", "New in K-Dramas", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/latest-kdrama-shows", sourceRef = "mdblist:https://mdblist.com/lists/snoak/latest-kdrama-shows"),
-            CatalogConfig("new_horror", "New in Horror Movies", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/latest-horror-movies", sourceRef = "mdblist:https://mdblist.com/lists/snoak/latest-horror-movies"),
-            CatalogConfig("new_scifi", "New in Sci-Fi Movies", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/latest-sci-fi-movies", sourceRef = "mdblist:https://mdblist.com/lists/snoak/latest-sci-fi-movies"),
-            CatalogConfig("new_spy_thriller", "New in Spy & Thriller Movies", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/latest-spythrillerassassin-movies", sourceRef = "mdblist:https://mdblist.com/lists/snoak/latest-spythrillerassassin-movies"),
-            CatalogConfig("coming_soon", "Coming Soon", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/upcoming-movies", sourceRef = "mdblist:https://mdblist.com/lists/snoak/upcoming-movies")
-        )
+            CatalogConfig("favorite_tv", context.getString(R.string.catalog_my_favorites_group), CatalogSourceType.PREINSTALLED, isPreinstalled = true),
+            CatalogConfig("trending_movies", context.getString(R.string.catalog_trending_movies), CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/trending-movies", sourceRef = "mdblist:https://mdblist.com/lists/snoak/trending-movies"),
+            CatalogConfig("trending_tv", context.getString(R.string.catalog_trending_tv), CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/trakt-s-trending-shows", sourceRef = "mdblist:https://mdblist.com/lists/snoak/trakt-s-trending-shows"),
+            CatalogConfig("trending_anime", context.getString(R.string.catalog_trending_anime), CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/trending-anime-shows", sourceRef = "mdblist:https://mdblist.com/lists/snoak/trending-anime-shows"),
+            CatalogConfig("top10_movies_today", context.getString(R.string.catalog_top10_movies_today), CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/top-10-movies-of-the-day", sourceRef = "mdblist:https://mdblist.com/lists/snoak/top-10-movies-of-the-day"),
+            CatalogConfig("top10_shows_today", context.getString(R.string.catalog_top10_shows_today), CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/top-10-shows-of-the-day", sourceRef = "mdblist:https://mdblist.com/lists/snoak/top-10-shows-of-the-day"),
+            CatalogConfig("just_added", context.getString(R.string.catalog_just_added), CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/latest-movies-digital-release", sourceRef = "mdblist:https://mdblist.com/lists/snoak/latest-movies-digital-release"),
+            CatalogConfig("top_movies_week", context.getString(R.string.catalog_top_movies_week), CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/linaspurinis/top-watched-movies-of-the-week", sourceRef = "mdblist:https://mdblist.com/lists/linaspurinis/top-watched-movies-of-the-week"),
+            CatalogConfig("trending_netflix_movies", context.getString(R.string.catalog_trending_netflix_movies), CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/netflix-top-10-movies", sourceRef = "mdblist:https://mdblist.com/lists/snoak/netflix-top-10-movies"),
+            CatalogConfig("trending_netflix_shows", context.getString(R.string.catalog_trending_netflix_shows), CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/netflix-top-10-shows", sourceRef = "mdblist:https://mdblist.com/lists/snoak/netflix-top-10-shows"),
+            CatalogConfig("trending_prime_movies", context.getString(R.string.catalog_trending_prime_movies), CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/amazon-prime-top-10-shows", sourceRef = "mdblist:https://mdblist.com/lists/snoak/amazon-prime-top-10-shows"),
+            CatalogConfig("trending_prime_shows", context.getString(R.string.catalog_trending_prime_shows), CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/amazon-prime-top-10-tv-shows", sourceRef = "mdblist:https://mdblist.com/lists/snoak/amazon-prime-top-10-tv-shows"),
+            CatalogConfig("trending_max_movies", context.getString(R.string.catalog_trending_max_movies), CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/hbo-top-10-movies-2", sourceRef = "mdblist:https://mdblist.com/lists/snoak/hbo-top-10-movies-2"),
+            CatalogConfig("trending_max_shows", context.getString(R.string.catalog_trending_max_shows), CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/hbo-top-10-tv-shows", sourceRef = "mdblist:https://mdblist.com/lists/snoak/hbo-top-10-tv-shows"),
+            CatalogConfig("trending_disney_movies", context.getString(R.string.catalog_trending_disney_movies), CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/disney-plus-top-10-movies", sourceRef = "mdblist:https://mdblist.com/lists/snoak/disney-plus-top-10-movies"),
+            CatalogConfig("trending_disney_shows", context.getString(R.string.catalog_trending_disney_shows), CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/disney-plus-top-10-tv-shows", sourceRef = "mdblist:https://mdblist.com/lists/snoak/disney-plus-top-10-tv-shows"),
+            CatalogConfig("trending_paramount_movies", context.getString(R.string.catalog_trending_paramount_movies), CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/paramount-plus-top-10-movies", sourceRef = "mdblist:https://mdblist.com/lists/snoak/paramount-plus-top-10-movies"),
+            CatalogConfig("trending_paramount_shows", context.getString(R.string.catalog_trending_paramount_shows), CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/paramount-plus-top-10-tv-shows", sourceRef = "mdblist:https://mdblist.com/lists/snoak/paramount-plus-top-10-tv-shows"),
+            CatalogConfig("trending_apple_movies", context.getString(R.string.catalog_trending_apple_movies), CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/apple-tv-top-10-movies", sourceRef = "mdblist:https://mdblist.com/lists/snoak/apple-tv-top-10-movies"),
+            CatalogConfig("trending_apple_shows", context.getString(R.string.catalog_trending_apple_shows), CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/apple-tv-top-10-tv-shows", sourceRef = "mdblist:https://mdblist.com/lists/snoak/apple-tv-top-10-tv-shows"),
+            CatalogConfig("new_kdramas", context.getString(R.string.catalog_new_kdramas), CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/latest-kdrama-shows", sourceRef = "mdblist:https://mdblist.com/lists/snoak/latest-kdrama-shows"),
+            CatalogConfig("new_horror", context.getString(R.string.catalog_new_horror), CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/latest-horror-movies", sourceRef = "mdblist:https://mdblist.com/lists/snoak/latest-horror-movies"),
+            CatalogConfig("new_scifi", context.getString(R.string.catalog_new_scifi), CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/latest-sci-fi-movies", sourceRef = "mdblist:https://mdblist.com/lists/snoak/latest-sci-fi-movies"),
+            CatalogConfig("new_spy_thriller", context.getString(R.string.catalog_new_spy_thriller), CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/latest-spythrillerassassin-movies", sourceRef = "mdblist:https://mdblist.com/lists/snoak/latest-spythrillerassassin-movies"),
+            CatalogConfig("coming_soon", context.getString(R.string.catalog_coming_soon), CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/upcoming-movies", sourceRef = "mdblist:https://mdblist.com/lists/snoak/upcoming-movies")        )
     }
     
     /**
@@ -361,57 +373,57 @@ class MediaRepository @Inject constructor(
         val categories = listOf(
             Category(
                 id = "trending_movies",
-                title = "Trending Movies",
+                title = context.getString(R.string.trending_movies),
                 items = safeItems({ trendingMovies.await() }, MediaType.MOVIE)
             ),
             Category(
                 id = "trending_tv",
-                title = "Trending Series",
+                title = context.getString(R.string.trending_series),
                 items = safeItems({ trendingTv.await() }, MediaType.TV)
             ),
             Category(
                 id = "trending_anime",
-                title = "Trending Anime",
+                title = context.getString(R.string.trending_anime),
                 items = safeItems({ trendingAnime.await() }, MediaType.TV)
             ),
             Category(
                 id = "trending_netflix",
-                title = "Trending on Netflix",
+                title = context.getString(R.string.trending_netflix),
                 items = safeItems({ netflix.await() }, MediaType.TV)
             ),
             Category(
                 id = "trending_disney",
-                title = "Trending on Disney+",
+                title =  context.getString(R.string.trending_disney),
                 items = safeItems({ disney.await() }, MediaType.TV)
             ),
             Category(
                 id = "trending_prime",
-                title = "Trending on Prime Video",
+                title = context.getString(R.string.trending_prime),
                 items = safeItems({ prime.await() }, MediaType.TV)
             ),
             Category(
                 id = "trending_hbo",
-                title = "Trending on Max",
+                title = context.getString(R.string.trending_hbo),
                 items = safeItems({ hboMax.await() }, MediaType.TV)
             ),
             Category(
                 id = "trending_apple",
-                title = "Trending on Apple TV+",
+                title = context.getString(R.string.trending_apple),
                 items = safeItems({ appleTv.await() }, MediaType.TV)
             ),
             Category(
                 id = "trending_paramount",
-                title = "Trending on Paramount+",
+                title = context.getString(R.string.trending_paramount),
                 items = safeItems({ paramount.await() }, MediaType.TV)
             ),
             Category(
                 id = "trending_hulu",
-                title = "Trending on Hulu",
+                title = context.getString(R.string.trending_hulu),
                 items = safeItems({ hulu.await() }, MediaType.TV)
             ),
             Category(
                 id = "trending_peacock",
-                title = "Trending on Peacock",
+                title = context.getString(R.string.trending_peacock),
                 items = safeItems({ peacock.await() }, MediaType.TV)
             )
         )
