@@ -18,6 +18,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -41,6 +42,7 @@ import com.arflix.tv.ui.theme.PurpleLight
 import com.arflix.tv.ui.theme.PurplePrimary
 import com.arflix.tv.ui.theme.TextPrimary
 import com.arflix.tv.ui.theme.TextSecondary
+import com.arflix.tv.R
 
 /**
  * Premium Player Loading Screen
@@ -54,7 +56,7 @@ fun PlayerLoadingScreen(
     backdropUrl: String? = null,
     title: String = "",
     subtitle: String? = null,
-    loadingMessage: String = "Loading sources..."
+    loadingMessage: String = stringResource(R.string.loading_sources)
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "playerLoading")
 
@@ -215,7 +217,7 @@ fun PlayerLoadingScreen(
                 ) {
                     Icon(
                         imageVector = Icons.Default.PlayArrow,
-                        contentDescription = "Loading",
+                        contentDescription = stringResource(R.string.loading),
                         tint = Color.White,
                         modifier = Modifier.size(40.dp)
                     )
@@ -423,7 +425,8 @@ fun SourceLoadingScreen(
                 Spacer(modifier = Modifier.height(20.dp))
 
                 Text(
-                    text = "Resolving from $sourceName",
+                    text = stringResource(R.string.resolving_from,sourceName
+                ),
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = TextPrimary
@@ -432,7 +435,7 @@ fun SourceLoadingScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = "Finding best quality stream...",
+                    text = stringResource(R.string.finding_best_quality_stream),
                     fontSize = 13.sp,
                     color = TextSecondary
                 )

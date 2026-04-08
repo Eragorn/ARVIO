@@ -1,13 +1,16 @@
 ﻿package com.arflix.tv.ui.screens.tv
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.arflix.tv.R
 import com.arflix.tv.data.model.IptvChannel
 import com.arflix.tv.data.model.IptvSnapshot
 import com.arflix.tv.data.repository.CloudSyncRepository
 import com.arflix.tv.data.repository.IptvConfig
 import com.arflix.tv.data.repository.IptvRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -84,10 +87,10 @@ data class TvUiState(
 
 @HiltViewModel
 class TvViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     val iptvRepository: IptvRepository,
     private val cloudSyncRepository: CloudSyncRepository
 ) : ViewModel() {
-
     private val _uiState = MutableStateFlow(TvUiState(isLoading = true))
     val uiState: StateFlow<TvUiState> = _uiState.asStateFlow()
     private var refreshJob: Job? = null
@@ -178,7 +181,7 @@ class TvViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(
                     isLoading = true,
                     error = null,
-                    loadingMessage = "Starting IPTV load...",
+                    loadingMessage = context.getString(R.string.iptv_starting_load),
                     loadingPercent = 2
                 )
             }
@@ -239,7 +242,7 @@ class TvViewModel @Inject constructor(
             }.onFailure { error ->
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    error = error.message ?: "Failed to load IPTV",
+                    error = error.message ?: context.getString(R.string.iptv_failed_to_load),
                     loadingMessage = null,
                     loadingPercent = 0
                 )
@@ -273,7 +276,7 @@ class TvViewModel @Inject constructor(
 
         epgRefreshJob = viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
-                loadingMessage = "Loading EPG in background...",
+                loadingMessage = context.getString(R.string.iptv_loading_epg_background),
                 loadingPercent = 90
             )
             runCatching {

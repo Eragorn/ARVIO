@@ -38,28 +38,30 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
+import com.arflix.tv.R
 import com.arflix.tv.ui.theme.ArflixTypography
 import com.arflix.tv.ui.theme.BackgroundDark
 import com.arflix.tv.ui.theme.TextPrimary
 import com.arflix.tv.ui.theme.TextSecondary
 
 data class BottomBarItem(
-    val label: String,
+    val labelId: Int,
     val icon: ImageVector,
     val route: String
 )
 
 val bottomBarItems = listOf(
-    BottomBarItem("Home", Icons.Default.Home, "home"),
-    BottomBarItem("Search", Icons.Default.Search, "search"),
-    BottomBarItem("Watchlist", Icons.Default.Bookmark, "watchlist"),
-    BottomBarItem("TV", Icons.Default.LiveTv, "tv"),
-    BottomBarItem("Settings", Icons.Default.Settings, "settings")
+    BottomBarItem(R.string.search_menu, Icons.Default.Home, "home"),
+    BottomBarItem(R.string.home_menu, Icons.Default.Search, "search"),
+    BottomBarItem(R.string.watchlist_menu, Icons.Default.Bookmark, "watchlist"),
+    BottomBarItem(R.string.tv_menu, Icons.Default.LiveTv, "tv"),
+    BottomBarItem(R.string.settings_menu, Icons.Default.Settings, "settings")
 )
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -126,7 +128,7 @@ fun AppBottomBar(
                     ) {
                         Icon(
                             imageVector = item.icon,
-                            contentDescription = item.label,
+                            contentDescription = stringResource(item.labelId),
                             tint = when {
                                 isFocused -> Color.White
                                 isSelected -> TextPrimary
@@ -146,7 +148,7 @@ fun AppBottomBar(
                         Spacer(modifier = Modifier.size(4.dp))
                     }
                     Text(
-                        text = item.label,
+                        text = stringResource(item.labelId),
                         style = ArflixTypography.caption.copy(fontSize = 10.sp),
                         color = when {
                             isFocused -> Color.White

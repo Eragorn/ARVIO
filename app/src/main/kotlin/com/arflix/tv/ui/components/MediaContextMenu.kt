@@ -52,8 +52,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.res.stringResource
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.arflix.tv.R
 import com.arflix.tv.ui.theme.ArflixTypography
 import com.arflix.tv.ui.theme.BackgroundCard
 import com.arflix.tv.ui.theme.BackgroundElevated
@@ -88,29 +90,29 @@ fun MediaContextMenu(
     val menuItems = buildList {
         add(MenuItem(
             icon = Icons.Default.PlayArrow,
-            label = "Play",
+            label = stringResource(R.string.play),
             action = onPlay
         ))
         add(MenuItem(
             icon = Icons.Default.Info,
-            label = "View Details",
+            label = stringResource(R.string.view_details),
             action = onViewDetails
         ))
         add(MenuItem(
             icon = if (isInWatchlist) Icons.Default.Remove else Icons.Default.Add,
-            label = if (isInWatchlist) "Remove from Watchlist" else "Add to Watchlist",
+            label = if (isInWatchlist) stringResource(R.string.remove_from_watchlist) else stringResource(R.string.add_to_watchlist),
             action = onToggleWatchlist
         ))
         add(MenuItem(
             icon = if (isWatched) Icons.Default.Visibility else Icons.Default.Check,
-            label = if (isWatched) "Mark as Unwatched" else "Mark as Watched",
+            label = if (isWatched) stringResource(R.string.mark_as_unwatched)else stringResource(R.string.mark_as_unwatched),
             action = onToggleWatched
         ))
         // Add "Remove from Continue Watching" only when applicable
         if (isContinueWatching && onRemoveFromContinueWatching != null) {
             add(MenuItem(
                 icon = Icons.Default.Close,
-                label = "Remove from Continue Watching",
+                label = stringResource(R.string.removed_from_continue_watching),
                 action = onRemoveFromContinueWatching
             ))
         }
@@ -206,7 +208,7 @@ fun MediaContextMenu(
 
                     // Hint
                     Text(
-                        text = "Press BACK to close",
+                        text = stringResource(R.string.back_to_close),
                         style = ArflixTypography.caption,
                         color = TextSecondary.copy(alpha = 0.5f)
                     )

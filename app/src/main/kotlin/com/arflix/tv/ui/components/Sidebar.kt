@@ -39,7 +39,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import com.arflix.tv.R
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
@@ -53,12 +55,12 @@ import com.arflix.tv.ui.theme.TextSecondary
  * Premium navigation sidebar with smooth animations
  * Ultra slim icon-only bar with animated focus states
  */
-enum class SidebarItem(val icon: ImageVector, val label: String) {
-    SEARCH(Icons.Outlined.Search, "Search"),
-    HOME(Icons.Outlined.Home, "Home"),
-    WATCHLIST(Icons.Outlined.Bookmark, "Watchlist"),
-    TV(Icons.Outlined.LiveTv, "TV"),
-    SETTINGS(Icons.Outlined.Settings, "Settings")
+enum class SidebarItem(val icon: ImageVector, val labelResId: Int) {
+    SEARCH(Icons.Outlined.Search, R.string.search_menu),
+    HOME(Icons.Outlined.Home, R.string.home_menu),
+    WATCHLIST(Icons.Outlined.Bookmark, R.string.watchlist_menu),
+    TV(Icons.Outlined.LiveTv, R.string.tv_menu),
+    SETTINGS(Icons.Outlined.Settings, R.string.settings_menu)
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -293,7 +295,7 @@ private fun SidebarIcon(
         ) {
             Icon(
                 imageVector = item.icon,
-                contentDescription = item.label,
+                contentDescription = stringResource(item.labelResId),
                 tint = iconColor,
                 modifier = Modifier
                     .size(20.dp)

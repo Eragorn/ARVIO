@@ -19,49 +19,50 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
+import androidx.annotation.StringRes
+import com.arflix.tv.R
 
-data class Genre(val id: Int, val name: String)
-
+data class Genre(val id: Int, @StringRes val name: Int)
 val MOVIE_GENRES = listOf(
-    Genre(28, "Action"), Genre(12, "Adventure"), Genre(16, "Animation"),
-    Genre(35, "Comedy"), Genre(80, "Crime"), Genre(99, "Documentary"),
-    Genre(18, "Drama"), Genre(10751, "Family"), Genre(14, "Fantasy"),
-    Genre(36, "History"), Genre(27, "Horror"), Genre(10402, "Music"),
-    Genre(9648, "Mystery"), Genre(10749, "Romance"), Genre(878, "Sci-Fi"),
-    Genre(53, "Thriller"), Genre(10752, "War"), Genre(37, "Western")
+    Genre(28, R.string.genre_action), Genre(12, R.string.genre_adventure), Genre(16, R.string.genre_animation),
+    Genre(35, R.string.genre_comedy), Genre(80, R.string.genre_crime), Genre(99, R.string.genre_documentary),
+    Genre(18, R.string.genre_drama), Genre(10751, R.string.genre_family), Genre(14, R.string.genre_fantasy),
+    Genre(36, R.string.genre_history), Genre(27, R.string.genre_horror), Genre(10402, R.string.genre_music),
+    Genre(9648, R.string.genre_mystery), Genre(10749, R.string.genre_romance), Genre(878, R.string.genre_scifi),
+    Genre(53, R.string.genre_thriller), Genre(10752, R.string.genre_war), Genre(37, R.string.genre_western)
 )
 val TV_GENRES = listOf(
-    Genre(10759, "Action & Adventure"), Genre(16, "Animation"),
-    Genre(35, "Comedy"), Genre(80, "Crime"), Genre(99, "Documentary"),
-    Genre(18, "Drama"), Genre(10751, "Family"), Genre(10762, "Kids"),
-    Genre(9648, "Mystery"), Genre(10765, "Sci-Fi & Fantasy"),
-    Genre(10768, "War & Politics"), Genre(37, "Western")
+    Genre(10759, R.string.genre_action_adventure), Genre(16, R.string.genre_animation),
+    Genre(35, R.string.genre_comedy), Genre(80, R.string.genre_crime), Genre(99, R.string.genre_documentary),
+    Genre(18, R.string.genre_drama), Genre(10751, R.string.genre_family), Genre(10762, R.string.genre_kids),
+    Genre(9648, R.string.genre_mystery), Genre(10765, R.string.genre_scifi_fantasy),
+    Genre(10768, R.string.genre_war_politics), Genre(37, R.string.genre_western)
 )
 val ALL_GENRES = listOf(
-    Genre(28, "Action"), Genre(12, "Adventure"), Genre(16, "Animation"),
-    Genre(35, "Comedy"), Genre(80, "Crime"), Genre(99, "Documentary"),
-    Genre(18, "Drama"), Genre(10751, "Family"), Genre(14, "Fantasy"),
-    Genre(27, "Horror"), Genre(9648, "Mystery"), Genre(10749, "Romance"),
-    Genre(878, "Sci-Fi"), Genre(53, "Thriller"), Genre(10752, "War"),
-    Genre(37, "Western")
+    Genre(28, R.string.genre_action), Genre(12, R.string.genre_adventure), Genre(16, R.string.genre_animation),
+    Genre(35, R.string.genre_comedy), Genre(80, R.string.genre_crime), Genre(99, R.string.genre_documentary),
+    Genre(18, R.string.genre_drama), Genre(10751, R.string.genre_family), Genre(14, R.string.genre_fantasy),
+    Genre(27, R.string.genre_horror), Genre(9648, R.string.genre_mystery), Genre(10749, R.string.genre_romance),
+    Genre(878, R.string.genre_scifi), Genre(53, R.string.genre_thriller), Genre(10752, R.string.genre_war),
+    Genre(37, R.string.genre_western)
 )
 val ANIME_GENRES = listOf(
-    Genre(28, "Action"), Genre(12, "Adventure"), Genre(35, "Comedy"),
-    Genre(18, "Drama"), Genre(14, "Fantasy"), Genre(27, "Horror"),
-    Genre(10749, "Romance"), Genre(878, "Sci-Fi"), Genre(9648, "Mystery")
+    Genre(28, R.string.genre_action), Genre(12, R.string.genre_adventure), Genre(35, R.string.genre_comedy),
+    Genre(18, R.string.genre_drama), Genre(14, R.string.genre_fantasy), Genre(27, R.string.genre_horror),
+    Genre(10749, R.string.genre_romance), Genre(878, R.string.genre_scifi), Genre(9648, R.string.genre_mystery)
 )
 
-data class Country(val code: String, val name: String)
+data class Country(val code: String, @StringRes val name: Int)
 val COUNTRIES = listOf(
-    Country("en", "English"), Country("ja", "Japanese"), Country("ko", "Korean"),
-    Country("es", "Spanish"), Country("fr", "French"), Country("de", "German"),
-    Country("it", "Italian"), Country("pt", "Portuguese"), Country("hi", "Hindi"),
-    Country("zh", "Chinese"), Country("tr", "Turkish"), Country("ar", "Arabic"),
-    Country("th", "Thai"), Country("nl", "Dutch"), Country("ru", "Russian")
+    Country("en", R.string.lang_english), Country("ja", R.string.lang_japanese), Country("ko", R.string.lang_korean),
+    Country("es", R.string.lang_spanish), Country("fr", R.string.lang_french), Country("de", R.string.lang_german),
+    Country("it", R.string.lang_italian), Country("pt", R.string.lang_portuguese), Country("hi", R.string.lang_hindi),
+    Country("zh", R.string.lang_chinese), Country("tr", R.string.lang_turkish), Country("ar", R.string.lang_arabic),
+    Country("th", R.string.lang_thai), Country("nl", R.string.lang_dutch), Country("ru", R.string.lang_russian)
 )
 
-enum class DiscoverType(val label: String) { ALL("All"), MOVIES("Movies"), TV_SHOWS("TV Shows"), ANIME("Anime") }
-enum class SortOption(val label: String, val apiValue: String) { POPULAR("Popular", "popularity.desc"), TOP_RATED("Top Rated", "vote_average.desc"), NEWEST("Newest", "primary_release_date.desc") }
+enum class DiscoverType(@StringRes val labelRes: Int) {ALL(R.string.discover_all),MOVIES(R.string.discover_movies),TV_SHOWS(R.string.discover_tv), ANIME(R.string.discover_anime)}
+enum class SortOption(@StringRes val labelRes: Int, val apiValue: String) {POPULAR(R.string.sort_popular, "popularity.desc"),TOP_RATED(R.string.sort_top_rated, "vote_average.desc"),NEWEST(R.string.sort_newest, "primary_release_date.desc")}
 
 data class SearchUiState(
     val query: String = "",

@@ -124,6 +124,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.res.stringResource
+import com.arflix.tv.R
 import com.arflix.tv.ui.components.Toast
 import com.arflix.tv.ui.components.topBarFocusedItem
 import com.arflix.tv.ui.components.topBarMaxIndex
@@ -748,7 +750,7 @@ fun DetailsScreen(
             onSelect = { stream ->
                 if (isPendingDebridStream(stream)) {
                     viewModel.showToast(
-                        "This debrid torrent is still being downloaded. Try another source or wait a bit.",
+                        context.getString(R.string.this_debrid_torrent_is_still_being_downloaded_try_another_source_or_wait_a_bit),
                         ToastType.ERROR
                     )
                     return@StreamSelector
@@ -984,7 +986,7 @@ private fun DetailsContent(
         val mobileScrollState = rememberScrollState()
 
         val genreText = genres.take(2).joinToString(" / ").ifEmpty {
-            if (item.mediaType == MediaType.TV) "TV Series" else "Movie"
+            if (item.mediaType == MediaType.TV) stringResource(R.string.tv_series) else stringResource(R.string.movie)
         }
         val displayDate = item.releaseDate?.takeIf { it.isNotEmpty() } ?: item.year
         val hasDuration = item.duration.isNotEmpty() && item.duration != "0m"
@@ -1175,19 +1177,19 @@ private fun DetailsContent(
                             .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        val playButtonLabel = if (!playLabel.isNullOrBlank()) playLabel else "Play"
+                        val playButtonLabel = if (!playLabel.isNullOrBlank()) playLabel else stringResource(R.string.play)
                         MobileActionButton(icon = Icons.Default.PlayArrow, text = playButtonLabel, isPrimary = true, onClick = { onButtonClick(0) })
-                        MobileActionButton(icon = Icons.Default.List, text = "Sources", onClick = { onButtonClick(1) })
-                        MobileActionButton(icon = Icons.Default.Movie, text = "Trailer", onClick = { onButtonClick(2) })
+                        MobileActionButton(icon = Icons.Default.List, text = stringResource(R.string.sources), onClick = { onButtonClick(1) })
+                        MobileActionButton(icon = Icons.Default.Movie, text = stringResource(R.string.trailer), onClick = { onButtonClick(2) })
                         MobileActionButton(
                             icon = if (buttonWatched) Icons.Default.Check else Icons.Default.Visibility,
-                            text = if (buttonWatched) "Watched" else "Watched",
+                            text = if (buttonWatched) stringResource(R.string.watched) else stringResource(R.string.watched),
                             isActive = buttonWatched,
                             onClick = { onButtonClick(3) }
                         )
                         MobileActionButton(
                             icon = if (isInWatchlist) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
-                            text = "Watchlist",
+                            text = stringResource(R.string.watchlist_menu),
                             isActive = isInWatchlist,
                             onClick = { onButtonClick(4) }
                         )
@@ -1198,7 +1200,7 @@ private fun DetailsContent(
                         if (totalSeasons > 1) {
                             Spacer(modifier = Modifier.height(20.dp))
                             Text(
-                                text = "Seasons",
+                                text = stringResource(R.string.seasons),
                                 style = ArvioSkin.typography.sectionTitle.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold),
                                 color = Color.White.copy(alpha = 0.9f)
                             )
@@ -1228,7 +1230,7 @@ private fun DetailsContent(
 
                         Spacer(modifier = Modifier.height(20.dp))
                         Text(
-                            text = "Episodes",
+                            text = stringResource(R.string.episodes),
                             style = ArvioSkin.typography.sectionTitle.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold),
                             color = Color.White.copy(alpha = 0.9f)
                         )
@@ -1264,7 +1266,7 @@ private fun DetailsContent(
                     ) {
                         Spacer(modifier = Modifier.height(24.dp))
                         Text(
-                            text = "Cast",
+                            text = stringResource(R.string.cast),
                             style = ArvioSkin.typography.sectionTitle.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold),
                             color = Color.White.copy(alpha = 0.9f)
                         )
@@ -1296,7 +1298,7 @@ private fun DetailsContent(
                     ) {
                         Spacer(modifier = Modifier.height(24.dp))
                         Text(
-                            text = "More Like This",
+                            text = stringResource(R.string.more_like_this),
                             style = ArvioSkin.typography.sectionTitle.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold),
                             color = Color.White.copy(alpha = 0.9f)
                         )
@@ -1500,7 +1502,7 @@ private fun DetailsContent(
                                 .padding(horizontal = 10.dp, vertical = 4.dp)
                         ) {
                             Text(
-                                text = "In Cinema",
+                                text = stringResource(R.string.in_cinema),
                                 style = ArflixTypography.caption.copy(
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold
@@ -1514,7 +1516,7 @@ private fun DetailsContent(
                 Spacer(modifier = Modifier.height(10.dp))
 
                 val genreText = genres.take(2).joinToString(" / ").ifEmpty {
-                    if (item.mediaType == MediaType.TV) "TV Series" else "Movie"
+                    if (item.mediaType == MediaType.TV) stringResource(R.string.tv_series) else stringResource(R.string.movie)
                 }
                 val isCompactHeight = configuration.screenHeightDp < 720
                 val displayDate = item.releaseDate?.takeIf { it.isNotEmpty() } ?: item.year
@@ -1617,7 +1619,7 @@ private fun DetailsContent(
                     if (!budgetText.isNullOrBlank()) {
                         Text(text = "|", style = separatorStyle, color = Color.White.copy(alpha = 0.7f))
                         Text(
-                            text = "Budget $budgetText",
+                            text = stringResource(R.string.budget, budgetText),
                             style = ArflixTypography.caption.copy(
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
@@ -1676,7 +1678,7 @@ private fun DetailsContent(
                 val playButtonLabel = if (!playLabel.isNullOrBlank()) {
                     playLabel
                 } else {
-                    "Play"
+                    stringResource(R.string.play)
                 }
                 Box(modifier = Modifier.clickable { onButtonClick(0) }) {
                     PremiumActionButton(
@@ -1689,7 +1691,7 @@ private fun DetailsContent(
                 Box(modifier = Modifier.clickable { onButtonClick(1) }) {
                     PremiumActionButton(
                         icon = Icons.Default.List,
-                        text = "Sources",
+                        text = stringResource(R.string.sources),
                         isFocused = focusSectionForUi == FocusSection.BUTTONS && buttonIndex == 1,
                         isIconOnly = true
                     )
@@ -1697,7 +1699,7 @@ private fun DetailsContent(
                 Box(modifier = Modifier.clickable { onButtonClick(2) }) {
                     PremiumActionButton(
                         icon = Icons.Default.Movie,
-                        text = "Trailer",
+                        text = stringResource(R.string.trailer),
                         isFocused = focusSectionForUi == FocusSection.BUTTONS && buttonIndex == 2,
                         isIconOnly = true
                     )
@@ -1705,7 +1707,7 @@ private fun DetailsContent(
                 Box(modifier = Modifier.clickable { onButtonClick(3) }) {
                     PremiumActionButton(
                         icon = if (buttonWatched) Icons.Default.Check else Icons.Default.Visibility,
-                        text = if (buttonWatched) "Watched" else "Mark Watched",
+                        text = if (buttonWatched) stringResource(R.string.watched) else stringResource(R.string.mark_as_watched),
                         isFocused = focusSectionForUi == FocusSection.BUTTONS && buttonIndex == 3,
                         isActive = buttonWatched,
                         isIconOnly = true
@@ -1714,7 +1716,7 @@ private fun DetailsContent(
                 Box(modifier = Modifier.clickable { onButtonClick(4) }) {
                     PremiumActionButton(
                         icon = if (isInWatchlist) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
-                        text = "Watchlist",
+                        text = stringResource(R.string.watchlist_menu),
                         isFocused = focusSectionForUi == FocusSection.BUTTONS && buttonIndex == 4,
                         isIconOnly = true,
                         isActive = isInWatchlist
@@ -1893,7 +1895,7 @@ private fun DetailsContent(
 
                     Column {
                         Text(
-                            text = "Cast",
+                            text = stringResource(R.string.cast),
                             style = ArvioSkin.typography.sectionTitle.copy(
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold
@@ -1940,7 +1942,7 @@ private fun DetailsContent(
 
                     Column {
                         Text(
-                            text = "Reviews",
+                            text = stringResource(R.string.reviews),
                             style = ArvioSkin.typography.sectionTitle.copy(
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold
@@ -1986,7 +1988,7 @@ private fun DetailsContent(
 
                     Column {
                         Text(
-                            text = "More Like This",
+                            text = stringResource(R.string.more_like_this),
                             style = ArvioSkin.typography.sectionTitle.copy(
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold
@@ -2355,7 +2357,7 @@ private fun EpisodeCard(
     }
     val previewText = episode.overview
         .trim()
-        .ifEmpty { "No episode synopsis available." }
+        .ifEmpty { stringResource(R.string.no_episode_synopsis_available) }
     val episodeAirDateLabel = remember(episode.airDate) { formatEpisodeAirDateLabel(episode.airDate) }
     val isEpisodeUnaired = remember(episode.airDate) { isFutureEpisodeAirDate(episode.airDate) }
 
@@ -2609,7 +2611,7 @@ private fun SeasonButton(
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text(
-            text = "Season $season",
+            text = stringResource(R.string.season_param, season),
             style = ArvioSkin.typography.button.copy(
                 fontSize = 13.sp,
                 fontWeight = if (isFocused || isSelected) FontWeight.Bold else FontWeight.Medium
@@ -3037,7 +3039,7 @@ private fun OngoingBadge() {
             modifier = Modifier.size(14.dp)
         )
         Text(
-            text = "ONGOING",
+            text = stringResource(R.string.ongoing),
             style = ArflixTypography.label,
             color = cyanColor
         )
@@ -3138,7 +3140,7 @@ private fun SimilarMediaCard(
     isFocused: Boolean,
     onClick: () -> Unit = {}
 ) {
-    val mediaTypeLabel = if (item.mediaType == MediaType.TV) "TV Series" else "Movie"
+    val mediaTypeLabel = if (item.mediaType == MediaType.TV) stringResource(R.string.tv_series) else stringResource(R.string.movie)
     val yearSuffix = item.year.takeIf { it.isNotBlank() }?.let { " | $it" }.orEmpty()
     MediaCard(
         item = item.copy(subtitle = "$mediaTypeLabel$yearSuffix"),

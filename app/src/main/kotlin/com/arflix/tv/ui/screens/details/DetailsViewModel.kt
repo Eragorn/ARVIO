@@ -1,8 +1,10 @@
 package com.arflix.tv.ui.screens.details
 
 import android.content.Context
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.arflix.tv.R
 import com.arflix.tv.data.model.CastMember
 import com.arflix.tv.data.model.Episode
 import com.arflix.tv.data.model.MediaItem
@@ -117,27 +119,27 @@ private data class ResumeInfo(
 
 // TMDB Genre mappings
 private val movieGenres = mapOf(
-    28 to "Action", 12 to "Adventure", 16 to "Animation", 35 to "Comedy",
-    80 to "Crime", 99 to "Documentary", 18 to "Drama", 10751 to "Family",
-    14 to "Fantasy", 36 to "History", 27 to "Horror", 10402 to "Music",
-    9648 to "Mystery", 10749 to "Romance", 878 to "Sci-Fi", 10770 to "TV Movie",
-    53 to "Thriller", 10752 to "War", 37 to "Western"
+    28 to R.string.genre_action, 12 to R.string.genre_adventure, 16 to R.string.genre_animation, 35 to R.string.genre_comedy,
+    80 to R.string.genre_crime, 99 to R.string.genre_documentary, 18 to R.string.genre_drama, 10751 to R.string.genre_family,
+    14 to R.string.genre_fantasy, 36 to R.string.genre_history, 27 to R.string.genre_horror, 10402 to R.string.genre_music,
+    9648 to R.string.genre_mystery, 10749 to R.string.genre_romance, 878 to R.string.genre_scifi, 10770 to R.string.genre_tv_movie,
+    53 to R.string.genre_thriller, 10752 to R.string.genre_war, 37 to R.string.genre_western
 )
 
 private val tvGenres = mapOf(
-    10759 to "Action & Adventure", 16 to "Animation", 35 to "Comedy",
-    80 to "Crime", 99 to "Documentary", 18 to "Drama", 10751 to "Family",
-    10762 to "Kids", 9648 to "Mystery", 10763 to "News", 10764 to "Reality",
-    10765 to "Sci-Fi & Fantasy", 10766 to "Soap", 10767 to "Talk",
-    10768 to "War & Politics", 37 to "Western"
+    10759 to R.string.genre_action_adventure, 16 to R.string.genre_animation, 35 to R.string.genre_comedy,
+    80 to R.string.genre_crime, 99 to R.string.genre_documentary, 18 to R.string.genre_drama, 10751 to R.string.genre_family,
+    10762 to R.string.genre_kids, 9648 to R.string.genre_mystery, 10763 to R.string.genre_news, 10764 to R.string.genre_reality,
+    10765 to R.string.genre_scifi_fantasy, 10766 to R.string.genre_soap, 10767 to R.string.genre_talk,
+    10768 to R.string.genre_war_politics, 37 to R.string.genre_western
 )
 
 private val languages = mapOf(
-    "en" to "English", "es" to "Spanish", "fr" to "French", "de" to "German",
-    "it" to "Italian", "pt" to "Portuguese", "ja" to "Japanese", "ko" to "Korean",
-    "zh" to "Chinese", "hi" to "Hindi", "ru" to "Russian", "ar" to "Arabic",
-    "nl" to "Dutch", "sv" to "Swedish", "pl" to "Polish", "tr" to "Turkish",
-    "th" to "Thai", "vi" to "Vietnamese", "id" to "Indonesian", "tl" to "Tagalog"
+    "en" to R.string.lang_english, "es" to R.string.lang_spanish, "fr" to R.string.lang_french, "de" to R.string.lang_german,
+    "it" to R.string.lang_italian, "pt" to R.string.lang_portuguese, "ja" to R.string.lang_japanese, "ko" to R.string.lang_korean,
+    "zh" to R.string.lang_chinese, "hi" to R.string.lang_hindi, "ru" to R.string.lang_russian, "ar" to R.string.lang_arabic,
+    "nl" to R.string.lang_dutch, "sv" to R.string.lang_swedish, "pl" to R.string.lang_polish, "tr" to R.string.lang_turkish,
+    "th" to R.string.lang_thai, "vi" to R.string.lang_vietnamese, "id" to R.string.lang_indonesian, "tl" to R.string.lang_tagalog
 )
 
 /**
@@ -212,7 +214,7 @@ class DetailsViewModel @Inject constructor(
             tmdbRating = if (isBlankRating(primary.tmdbRating)) fallback.tmdbRating else primary.tmdbRating,
             image = primary.image.ifBlank { fallback.image },
             backdrop = primary.backdrop ?: fallback.backdrop,
-            genreIds = if (primary.genreIds.isEmpty()) fallback.genreIds else primary.genreIds,
+            genreIds = primary.genreIds.ifEmpty { fallback.genreIds },
             originalLanguage = primary.originalLanguage ?: fallback.originalLanguage,
             isOngoing = primary.isOngoing || fallback.isOngoing,
             totalEpisodes = primary.totalEpisodes ?: fallback.totalEpisodes,
@@ -328,10 +330,10 @@ class DetailsViewModel @Inject constructor(
 
                 // Map genre IDs to names
                 val genreMap = if (mediaType == MediaType.TV) tvGenres else movieGenres
-                val genreNames = mergedItem.genreIds.mapNotNull { genreMap[it] }.take(4)
+                val genreNames = mergedItem.genreIds.mapNotNull { genreMap[it]?.let(context::getString) }.take(4)
 
                 // Get language name
-                val languageName = mergedItem.originalLanguage?.let { languages[it] ?: it.uppercase() }
+                val languageName = mergedItem.originalLanguage?.let { languages[it]?.let(context::getString) ?: it.uppercase() }
 
                 // Format budget for movies
                 val budgetDisplay = if (mediaType == MediaType.MOVIE && mergedItem.budget != null && mergedItem.budget > 0) {
@@ -539,7 +541,7 @@ class DetailsViewModel @Inject constructor(
                         val hasWatchedEpisodes = decoratedEpisodes.any { it.isWatched }
                         updateState { state ->
                             val shouldUseEpisodeTarget = !hasExplicitEpisodeTarget &&
-                                (state.playLabel.isNullOrBlank() || state.playLabel == "Start S1E1")
+                                (state.playLabel.isNullOrBlank() || state.playLabel == context.getString(R.string.start_s1e1))
                             state.copy(
                                 episodes = decoratedEpisodes,
                                 initialEpisodeIndex = initialEpisodeIndex,
@@ -551,9 +553,13 @@ class DetailsViewModel @Inject constructor(
                                 } else state.playEpisode,
                                 playLabel = if (shouldUseEpisodeTarget) {
                                     if (nextUnwatchedEpisode != null) {
-                                        "Continue S${nextUnwatchedEpisode.seasonNumber}E${nextUnwatchedEpisode.episodeNumber}"
+                                        context.getString(
+                                            R.string.continue_sXeX,
+                                            nextUnwatchedEpisode.seasonNumber,
+                                            nextUnwatchedEpisode.episodeNumber
+                                        )
                                     } else if (hasWatchedEpisodes) {
-                                        "Start S1E1"
+                                        context.getString(R.string.start_s1e1)
                                     } else {
                                         state.playLabel
                                     }
@@ -618,7 +624,11 @@ class DetailsViewModel @Inject constructor(
                             state.copy(
                                 playSeason = initialSeason,
                                 playEpisode = initialEpisode,
-                                playLabel = matchedResume?.label ?: "Continue S${initialSeason}E${initialEpisode}",
+                                playLabel = matchedResume?.label ?: context.getString(
+                                    R.string.continue_sXeX,
+                                    initialSeason,
+                                    initialEpisode
+                                ),
                                 playPositionMs = matchedResume?.positionMs
                             )
                         }
@@ -733,14 +743,14 @@ class DetailsViewModel @Inject constructor(
                 } else {
                     // If no episodes returned, keep current and show error
                     _uiState.value = _uiState.value.copy(
-                        toastMessage = "No episodes found for Season $seasonNumber",
+                        toastMessage = context.getString(R.string.no_episodes_found_season, seasonNumber),
                         toastType = ToastType.ERROR
                     )
                 }
             } catch (e: Exception) {
                 // On error, keep showing current episodes
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = "Failed to load Season $seasonNumber",
+                    toastMessage = context.getString(R.string.load_season_failed, seasonNumber),
                     toastType = ToastType.ERROR
                 )
             }
@@ -761,7 +771,7 @@ class DetailsViewModel @Inject constructor(
                     }
                     _uiState.value = _uiState.value.copy(
                         item = currentItem.copy(isWatched = newWatched),
-                        toastMessage = if (newWatched) "Marked as watched" else "Marked as unwatched",
+                        toastMessage = if (newWatched) context.getString(R.string.mark_as_watched) else context.getString(R.string.mark_as_unwatched),
                         toastType = ToastType.SUCCESS
                     )
                     runCatching { launcherContinueWatchingRepository.refreshForCurrentProfile() }
@@ -769,7 +779,7 @@ class DetailsViewModel @Inject constructor(
                     val targetEpisode = _uiState.value.episodes.getOrNull(episodeIndex ?: 0)
                     if (targetEpisode == null) {
                         _uiState.value = _uiState.value.copy(
-                            toastMessage = "No episode selected",
+                            toastMessage = context.getString(R.string.no_episode_selected),
                             toastType = ToastType.ERROR
                         )
                         return@launch
@@ -842,9 +852,9 @@ class DetailsViewModel @Inject constructor(
                         item = currentItem.copy(isWatched = anyWatched),
                         episodes = updatedEpisodes,
                         toastMessage = if (episodeWatched) {
-                            "S${targetEpisode.seasonNumber}E${targetEpisode.episodeNumber} marked as watched"
+                            context.getString(R.string.episode_marked_as_watched, targetEpisode.seasonNumber, targetEpisode.episodeNumber)
                         } else {
-                            "S${targetEpisode.seasonNumber}E${targetEpisode.episodeNumber} marked as unwatched"
+                            context.getString(R.string.episode_marked_as_unwatched, targetEpisode.seasonNumber, targetEpisode.episodeNumber)
                         },
                         toastType = ToastType.SUCCESS
                     )
@@ -853,7 +863,7 @@ class DetailsViewModel @Inject constructor(
                 runCatching { cloudSyncRepository.pushToCloud() }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = "Failed to update watched status",
+                    toastMessage = context.getString(R.string.watched_update_failed),
                     toastType = ToastType.ERROR
                 )
             }
@@ -880,12 +890,12 @@ class DetailsViewModel @Inject constructor(
 
                 _uiState.value = _uiState.value.copy(
                     isInWatchlist = newInWatchlist,
-                    toastMessage = if (newInWatchlist) "Added to watchlist" else "Removed from watchlist",
+                    toastMessage = if (newInWatchlist) context.getString(R.string.added_to_watchlist) else context.getString(R.string.removed_from_watchlist),
                     toastType = ToastType.SUCCESS
                 )
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = "Failed to update watchlist",
+                    toastMessage = context.getString(R.string.watchlist_update_failed),
                     toastType = ToastType.ERROR
                 )
             }
@@ -1033,12 +1043,15 @@ class DetailsViewModel @Inject constructor(
                     return PlayTarget(
                         season = seasonNum,
                         episode = firstUnwatched.episodeNumber,
-                        label = "Continue S${seasonNum}E${firstUnwatched.episodeNumber}"
+                        label = context.getString(
+                            R.string.continue_sXeX,
+                            seasonNum,
+                            firstUnwatched.episodeNumber)
                     )
                 }
             }
             // All episodes watched — offer restart
-            PlayTarget(season = 1, episode = 1, label = "Start S1E1")
+            PlayTarget(season = 1, episode = 1, label =context.getString(R.string.start_s1e1))
         } catch (_: Exception) {
             null
         }
@@ -1316,7 +1329,7 @@ class DetailsViewModel @Inject constructor(
 
                 if (seasonEpisodes.isEmpty()) {
                     _uiState.value = _uiState.value.copy(
-                        toastMessage = "No episodes found for Season $season",
+                        toastMessage = context.getString(R.string.no_episodes_found_season, season),
                         toastType = ToastType.ERROR
                     )
                     return@launch
@@ -1391,7 +1404,7 @@ class DetailsViewModel @Inject constructor(
                     playEpisode = playTarget?.episode ?: _uiState.value.playEpisode,
                     playLabel = playTarget?.label ?: _uiState.value.playLabel,
                     playPositionMs = playTarget?.positionMs ?: _uiState.value.playPositionMs,
-                    toastMessage = "Season $season marked as watched",
+                    toastMessage = context.getString(R.string.season_marked_as_watched, season),
                     toastType = ToastType.SUCCESS
                 )
                 runCatching { launcherContinueWatchingRepository.refreshForCurrentProfile() }
@@ -1400,7 +1413,7 @@ class DetailsViewModel @Inject constructor(
                 runCatching { cloudSyncRepository.pushToCloud() }
             } catch (_: Exception) {
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = "Failed to mark season as watched",
+                    toastMessage = context.getString(R.string.mark_season_watched_failed),
                     toastType = ToastType.ERROR
                 )
             }
@@ -1645,7 +1658,7 @@ class DetailsViewModel @Inject constructor(
 
         return if (mediaType == MediaType.MOVIE) {
             ResumeInfo(
-                label = "Continue at $timeLabel",
+                label = context.getString(R.string.continue_at, timeLabel),
                 positionMs = seconds * 1000L
             )
         } else {
@@ -1654,7 +1667,7 @@ class DetailsViewModel @Inject constructor(
             ResumeInfo(
                 season = s,
                 episode = e,
-                label = "Continue S${s}E${e} at $timeLabel",
+                label = context.getString(R.string.continue_se_at, s, e, timeLabel),
                 positionMs = seconds * 1000L
             )
         }
@@ -1721,7 +1734,7 @@ class DetailsViewModel @Inject constructor(
             PlayTarget(
                 season = 1,
                 episode = 1,
-                label = "Start S1E1"
+                label = context.getString(R.string.start_s1e1)
             )
         } else {
             val next = result.nextUnwatched
@@ -1729,13 +1742,13 @@ class DetailsViewModel @Inject constructor(
                 PlayTarget(
                     season = next.first,
                     episode = next.second,
-                    label = "Continue S${next.first}E${next.second}"
+                    label = context.getString(R.string.continue_sXeX,next.first,next.second)
                 )
             } else {
                 PlayTarget(
                     season = 1,
                     episode = 1,
-                    label = "Start S1E1"
+                    label = context.getString(R.string.start_s1e1)
                 )
             }
         }

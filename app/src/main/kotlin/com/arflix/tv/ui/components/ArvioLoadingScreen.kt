@@ -12,6 +12,8 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
+import com.arflix.tv.R
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -90,9 +92,8 @@ fun ArvioLoadingScreen(
 
             if (showText) {
                 Spacer(modifier = Modifier.height(30.dp))
-
                 Text(
-                    text = "Loading...",
+                    text = stringResource(R.string.loading),
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
                     color = TextSecondary,
@@ -183,7 +184,7 @@ fun CompactLoadingIndicator(
 @Composable
 fun LoadingOverlay(
     modifier: Modifier = Modifier,
-    message: String = "Loading..."
+    message: String = stringResource(R.string.loading)
 ) {
     Box(
         modifier = modifier

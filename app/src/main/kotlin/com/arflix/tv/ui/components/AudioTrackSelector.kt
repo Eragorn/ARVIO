@@ -36,9 +36,11 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.arflix.tv.R
 import com.arflix.tv.ui.theme.ArflixTypography
 import com.arflix.tv.ui.theme.Pink
 import com.arflix.tv.ui.theme.TextPrimary
@@ -125,7 +127,7 @@ fun AudioTrackSelector(
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
-                        text = "Audio Track",
+                        text = stringResource(R.string.audio_track),
                         style = ArflixTypography.sectionTitle,
                         color = TextPrimary
                     )
@@ -140,7 +142,7 @@ fun AudioTrackSelector(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "No audio tracks available",
+                            text = stringResource(R.string.no_audio_track),
                             style = ArflixTypography.body,
                             color = TextSecondary
                         )
@@ -164,7 +166,7 @@ fun AudioTrackSelector(
                 
                 // Help text
                 Text(
-                    text = "Press BACK to close",
+                    text = stringResource(R.string.back_to_close),
                     style = ArflixTypography.caption,
                     color = TextSecondary.copy(alpha = 0.5f),
                     modifier = Modifier.align(Alignment.CenterHorizontally)
@@ -237,7 +239,7 @@ private fun AudioTrackItem(
         if (isSelected) {
             Icon(
                 imageVector = Icons.Default.Check,
-                contentDescription = "Selected",
+                contentDescription = stringResource(R.string.selected),
                 tint = if (isFocused) Color.White else Pink,
                 modifier = Modifier.size(20.dp)
             )

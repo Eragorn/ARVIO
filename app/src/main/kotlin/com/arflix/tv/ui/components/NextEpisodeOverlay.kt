@@ -44,11 +44,13 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
+import com.arflix.tv.R
 import com.arflix.tv.ui.theme.ArflixTypography
 import com.arflix.tv.ui.theme.Pink
 import com.arflix.tv.ui.theme.TextPrimary
@@ -157,13 +159,13 @@ fun NextEpisodeOverlay(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "UP NEXT",
+                            text = stringResource(R.string.up_next),
                             style = ArflixTypography.label,
                             color = Pink
                         )
                         Spacer(modifier = Modifier.weight(1f))
                         Text(
-                            text = "in ${countdown}s",
+                            text = stringResource(R.string.in_countdown, countdown),
                             style = ArflixTypography.body,
                             color = TextSecondary
                         )
@@ -286,7 +288,7 @@ fun NextEpisodeOverlay(
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "PLAY NOW",
+                                    text = stringResource(R.string.play_now),
                                     style = ArflixTypography.button,
                                     color = if (focusedButton == 0) Color.Black else TextSecondary
                                 )
@@ -310,7 +312,7 @@ fun NextEpisodeOverlay(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Close,
-                                contentDescription = "Cancel",
+                                contentDescription = stringResource(R.string.cancel),
                                 tint = if (focusedButton == 1) Color.Black else TextSecondary,
                                 modifier = Modifier.size(24.dp)
                             )

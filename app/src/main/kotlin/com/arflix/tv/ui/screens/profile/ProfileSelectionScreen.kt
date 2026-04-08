@@ -45,6 +45,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -56,6 +57,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import com.arflix.tv.R
 import com.arflix.tv.data.model.Profile
 import com.arflix.tv.data.model.ProfileColors
 import com.arflix.tv.ui.components.AvatarIcon
@@ -165,7 +167,7 @@ fun ProfileSelectionScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = if (uiState.isManageMode) "Manage Profiles" else "Who's watching?",
+                text = if (uiState.isManageMode) stringResource(R.string.manage_profiles) else stringResource(R.string.who_s_watching),
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Normal,
                 color = Color.White.copy(alpha = 0.8f)
@@ -418,7 +420,7 @@ private fun ProfileAvatar(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Edit,
-                        contentDescription = "Edit",
+                        contentDescription = stringResource(R.string.edit),
                         tint = Color.White,
                         modifier = Modifier.size(32.dp)
                     )
@@ -460,7 +462,7 @@ private fun AddProfileButton(
     ) {
         val addContent: @Composable () -> Unit = {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Icon(imageVector = Icons.Default.Add, contentDescription = "Add Profile", tint = Color.White, modifier = Modifier.size(48.dp))
+                Icon(imageVector = Icons.Default.Add, contentDescription = stringResource(R.string.add_profile), tint = Color.White, modifier = Modifier.size(48.dp))
             }
         }
         if (isTouchDevice) {
@@ -501,7 +503,7 @@ private fun AddProfileButton(
         Spacer(modifier = Modifier.height(12.dp))
 
         Text(
-            text = "Add Profile",
+            text = stringResource(R.string.add_profile),
             fontSize = 16.sp,
             fontWeight = FontWeight.Medium,
             color = if (isFocused > 0) Color.White else Color.White.copy(alpha = 0.7f),
@@ -543,7 +545,7 @@ private fun ManageProfilesButton(
         )
     ) {
         Text(
-            text = if (isManageMode) "Done" else "Manage Profiles",
+            text = if (isManageMode) stringResource(R.string.done) else stringResource(R.string.manage_profiles),
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
             color = Color.White,
@@ -585,7 +587,7 @@ private fun CloudConnectButton(
                 modifier = Modifier.size(18.dp)
             )
             Text(
-                text = "Connect to ARVIO Cloud",
+                text = stringResource(R.string.connect_to_arvio_cloud),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
                 color = Color.White.copy(alpha = 0.85f)
@@ -623,7 +625,7 @@ private fun CloudConnectButton(
                     modifier = Modifier.size(18.dp)
                 )
                 Text(
-                    text = "Connect to ARVIO Cloud",
+                    text = stringResource(R.string.connect_to_arvio_cloud),
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
                     color = if (isFocused > 0) Color.White else Color.White.copy(alpha = 0.7f)

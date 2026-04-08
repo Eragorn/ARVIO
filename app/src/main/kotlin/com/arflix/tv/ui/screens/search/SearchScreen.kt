@@ -63,12 +63,14 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.arflix.tv.R
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.data.model.Category
@@ -121,8 +123,8 @@ fun SearchScreen(
     val activeCategories: List<Category> = when {
         hasSearchResults -> {
             val list = mutableListOf<Category>()
-            if (uiState.movieResults.isNotEmpty()) list.add(Category("s_m", "Movies (${uiState.movieResults.size})", uiState.movieResults))
-            if (uiState.tvResults.isNotEmpty()) list.add(Category("s_t", "TV Shows (${uiState.tvResults.size})", uiState.tvResults))
+            if (uiState.movieResults.isNotEmpty()) list.add(Category("s_m", stringResource(R.string.movies_with_count, uiState.movieResults.size), uiState.movieResults))
+            if (uiState.tvResults.isNotEmpty()) list.add(Category("s_t", stringResource(R.string.tv_shows_with_count, uiState.tvResults.size), uiState.tvResults))
             list
         }
         uiState.query.isEmpty() -> uiState.discoverCategories.filter { it.items.isNotEmpty() }
@@ -155,7 +157,7 @@ fun SearchScreen(
             // This prevents the "back to keyboard" issue when returning from details
         }
     }
-    
+
     LaunchedEffect(Unit) { searchFocusRequester.requestFocus(); suppressSelectUntilMs = SystemClock.elapsedRealtime() + 150L }
 
     val showFilters = uiState.query.isEmpty()
@@ -253,7 +255,7 @@ fun SearchScreen(
             Box(modifier = Modifier.fillMaxWidth().padding(bottom = if (isCompactHeight) 3.dp else 5.dp), contentAlignment = Alignment.Center) {
                 if (isTouchDevice) {
                     OutlinedTextField(value = uiState.query, onValueChange = { viewModel.updateQuery(it) },
-                        placeholder = { Text("Search or discover... try \"top 10 horror movies\"", style = ArflixTypography.body, color = TextSecondary) },
+                        placeholder = { Text(stringResource(R.string.search_hint_try), style = ArflixTypography.body, color = TextSecondary) },
                         leadingIcon = { Icon(Icons.Default.Search, null, tint = if (isSearchInputFocused) Pink else TextSecondary, modifier = Modifier.size(22.dp)) },
                         textStyle = ArflixTypography.body.copy(color = TextPrimary), singleLine = true,
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search), keyboardActions = KeyboardActions(onSearch = { viewModel.search(); keyboardController?.hide() }),
@@ -267,7 +269,7 @@ fun SearchScreen(
                             textStyle = ArflixTypography.body.copy(color = TextPrimary, fontSize = 14.sp), cursorBrush = SolidColor(Color.White), singleLine = true,
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search), keyboardActions = KeyboardActions(onSearch = { viewModel.search(); keyboardController?.hide() }),
                             modifier = Modifier.weight(1f).focusRequester(searchFocusRequester).onFocusChanged { s -> isSearchInputFocused = s.isFocused; if (s.isFocused) focusZone = FocusZone.SEARCH_INPUT },
-                            decorationBox = { inner -> if (uiState.query.isEmpty()) Text("Search or discover... try \"top 10 horror movies\"", style = ArflixTypography.body.copy(fontSize = 14.sp), color = Color.White.copy(alpha = 0.25f)); inner() })
+                            decorationBox = { inner -> if (uiState.query.isEmpty()) Text(stringResource(R.string.search_hint_try), style = ArflixTypography.body.copy(fontSize = 14.sp), color = Color.White.copy(alpha = 0.25f)); inner() })
                     }
                 }
             }
@@ -289,16 +291,16 @@ fun SearchScreen(
                     }
                 ) {
                     LazyRow(modifier = Modifier.fillMaxWidth().padding(bottom = 3.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(horizontal = 2.dp)) {
-                        items(DiscoverType.entries.size, key = { DiscoverType.entries[it].name }) { i -> val t = DiscoverType.entries[i]; GlowChip(t.label, uiState.selectedType == t) { viewModel.selectType(t) } }
+                        items(DiscoverType.entries.size, key = { DiscoverType.entries[it].name }) { i -> val t = DiscoverType.entries[i]; GlowChip(stringResource(t.labelRes), uiState.selectedType == t) { viewModel.selectType(t) } }
                     }
                     LazyRow(modifier = Modifier.fillMaxWidth().padding(bottom = 3.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(horizontal = 2.dp)) {
                         val genres = viewModel.getGenresForType()
-                        item(key = "all_g") { GlowChip("All Genres", uiState.selectedGenre == null) { viewModel.selectGenre(null) } }
-                        items(genres.size, key = { "g_${genres[it].id}" }) { i -> GlowChip(genres[i].name, uiState.selectedGenre == genres[i]) { viewModel.selectGenre(genres[i]) } }
+                        item(key = "all_g") { GlowChip(stringResource(R.string.all_genre), uiState.selectedGenre == null) { viewModel.selectGenre(null) } }
+                        items(genres.size, key = { "g_${genres[it].id}" }) { i -> GlowChip(stringResource(genres[i].name), uiState.selectedGenre == genres[i]) { viewModel.selectGenre(genres[i]) } }
                     }
                     LazyRow(modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(horizontal = 2.dp)) {
-                        item(key = "any_l") { GlowChip("Any Language", uiState.selectedCountry == null) { viewModel.selectCountry(null) } }
-                        items(COUNTRIES.size, key = { "c_${COUNTRIES[it].code}" }) { i -> GlowChip(COUNTRIES[i].name, uiState.selectedCountry == COUNTRIES[i]) { viewModel.selectCountry(COUNTRIES[i]) } }
+                        item(key = "any_l") { GlowChip(stringResource(R.string.any_language), uiState.selectedCountry == null) { viewModel.selectCountry(null) } }
+                        items(COUNTRIES.size, key = { "c_${COUNTRIES[it].code}" }) { i -> GlowChip(stringResource(COUNTRIES[i].name), uiState.selectedCountry == COUNTRIES[i]) { viewModel.selectCountry(COUNTRIES[i]) } }
                     }
                 }
             }
@@ -316,7 +318,7 @@ fun SearchScreen(
                 }
 
                 uiState.query.isNotEmpty() && !uiState.isAiSearch && !hasSearchResults -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No results found for \"${uiState.query}\"", style = ArflixTypography.body, color = TextSecondary) }
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(stringResource(R.string.no_results_for, uiState.query), style = ArflixTypography.body, color = TextSecondary) }
                 }
 
                 uiState.isDiscoverLoading && activeCategories.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { LoadingIndicator(color = Pink, size = 48.dp) }
@@ -450,7 +452,11 @@ private fun RowsLayer(
                             itemsIndexed(category.items, key = { _, item -> "${item.mediaType}_${item.id}" }) { itemIdx, item ->
                                 val itemIsFocused = isCurrentRow && itemIdx == currentItemIndex
                                 MediaCard(
-                                    item = item.copy(title = buildCardTitle(item), subtitle = buildCardSubtitle(item)),
+                                    item = item.copy(title = buildCardTitle(item),
+                                    subtitle =  when (item.mediaType) {
+                                        MediaType.TV -> stringResource(R.string.tv_series)
+                                        MediaType.MOVIE -> stringResource(R.string.movie)
+                                    }),
                                     width = itemWidth,
                                     isLandscape = !usePosterCards,
                                     logoImageUrl = cardLogoUrls["${item.mediaType}_${item.id}"],
@@ -486,7 +492,10 @@ private fun ContentGrid(items: List<MediaItem>, usePosterCards: Boolean, isLoadi
         horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxSize()) {
         items(items.size, key = { "${items[it].mediaType}_${items[it].id}" }) { idx ->
             val item = items[idx]
-            MediaCard(item = item.copy(title = buildCardTitle(item), subtitle = buildCardSubtitle(item)),
+            MediaCard(item = item.copy(title = buildCardTitle(item),         subtitle = when (item.mediaType) {
+                MediaType.TV -> stringResource(R.string.tv_series)
+                MediaType.MOVIE -> stringResource(R.string.movie)
+            }),
                 width = itemWidth, isLandscape = !usePosterCards, showProgress = false, titleMaxLines = 2, subtitleMaxLines = 1,
                 isFocusedOverride = false, enableSystemFocus = true, onFocused = {}, onClick = { onItemClick(item) },
                 modifier = if (isTouchDevice) Modifier.clickable { onItemClick(item) } else Modifier)
@@ -498,10 +507,6 @@ private fun ContentGrid(items: List<MediaItem>, usePosterCards: Boolean, isLoadi
 private fun buildCardTitle(item: MediaItem): String {
     val year = item.year.takeIf { it.isNotBlank() }
     return if (year != null) "${item.title} ($year)" else item.title
-}
-
-private fun buildCardSubtitle(item: MediaItem): String {
-    return when (item.mediaType) { MediaType.TV -> "Series"; MediaType.MOVIE -> "Movie" }
 }
 
 private enum class FocusZone { SIDEBAR, SEARCH_INPUT, FILTERS, RESULTS }

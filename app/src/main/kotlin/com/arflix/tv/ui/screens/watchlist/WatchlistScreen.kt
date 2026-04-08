@@ -41,6 +41,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -52,6 +53,7 @@ import androidx.tv.foundation.lazy.grid.itemsIndexed
 import androidx.tv.foundation.lazy.grid.rememberTvLazyGridState
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.arflix.tv.R
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.ui.components.AppTopBar
 import com.arflix.tv.ui.components.AppTopBarContentTopInset
@@ -305,7 +307,7 @@ fun WatchlistScreen(
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
-                        text = "MY WATCHLIST",
+                        text = stringResource(R.string.my_watchlist),
                         style = ArflixTypography.sectionTitle,
                         color = TextPrimary
                     )
@@ -338,13 +340,13 @@ fun WatchlistScreen(
                                 )
                                 Spacer(modifier = Modifier.height(16.dp))
                                 Text(
-                                    text = "Your watchlist is empty",
+                                    text = stringResource(R.string.your_watchlist_is_empty),
                                     style = ArflixTypography.body,
                                     color = Color.White.copy(alpha = 0.5f)
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
-                                    text = "Add movies and shows to watch later",
+                                    text = stringResource(R.string.add_movies_and_shows_to_watch_later),
                                     style = ArflixTypography.caption,
                                     color = Color.White.copy(alpha = 0.3f)
                                 )

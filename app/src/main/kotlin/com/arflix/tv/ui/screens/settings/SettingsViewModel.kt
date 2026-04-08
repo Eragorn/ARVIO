@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.arflix.tv.R
 import com.arflix.tv.data.api.TraktDeviceCode
 import com.arflix.tv.data.model.Addon
 import com.arflix.tv.data.model.CatalogConfig
@@ -458,7 +459,7 @@ class SettingsViewModel @Inject constructor(
                         syncedMovies = result.moviesSynced,
                         syncedEpisodes = result.episodesSynced,
                         lastSyncTime = formatSyncTime(java.time.Instant.now().toString()),
-                        toastMessage = "Synced ${result.moviesSynced} movies and ${result.episodesSynced} episodes",
+                        toastMessage = context.getString(R.string.sync_success, result.moviesSynced, result.episodesSynced),
                         toastType = ToastType.SUCCESS
                     )
                     // Invalidate repository cache to pick up new data
@@ -468,7 +469,7 @@ class SettingsViewModel @Inject constructor(
                 is SyncResult.Error -> {
                     if (!silent) {
                         _uiState.value = _uiState.value.copy(
-                            toastMessage = "Sync failed: ${result.message}",
+                            toastMessage = context.getString(R.string.sync_failed, result.message),
                             toastType = ToastType.ERROR
                         )
                     }
@@ -487,9 +488,9 @@ class SettingsViewModel @Inject constructor(
                         syncedEpisodes = _uiState.value.syncedEpisodes + result.episodesSynced,
                         lastSyncTime = formatSyncTime(java.time.Instant.now().toString()),
                         toastMessage = if (result.moviesSynced == 0 && result.episodesSynced == 0)
-                            "Already up to date"
+                            context.getString(R.string.sync_already_up_to_date)
                         else
-                            "Synced ${result.moviesSynced} movies and ${result.episodesSynced} episodes",
+                            context.getString(R.string.sync_success, result.moviesSynced, result.episodesSynced),
                         toastType = ToastType.SUCCESS
                     )
                     // Invalidate repository cache to pick up new data
@@ -498,7 +499,7 @@ class SettingsViewModel @Inject constructor(
                 }
                 is SyncResult.Error -> {
                     _uiState.value = _uiState.value.copy(
-                        toastMessage = "Sync failed: ${result.message}",
+                        toastMessage = context.getString(R.string.sync_failed, result.message),
                         toastType = ToastType.ERROR
                     )
                 }
@@ -735,7 +736,12 @@ class SettingsViewModel @Inject constructor(
                 prefs[contentLanguageKey()] = lang
             }
             mediaRepository.contentLanguage = if (lang == "en-US") null else lang
-            _uiState.value = _uiState.value.copy(contentLanguage = lang)
+            mediaRepository.clearCache()
+            _uiState.value = _uiState.value.copy(
+                contentLanguage = lang,
+                toastMessage = context.getString(R.string.content_language_changed, LANGUAGES.firstOrNull { it.first == lang }?.let { context.getString(it.second) } ?: lang),
+                toastType = ToastType.SUCCESS
+            )
             syncLocalStateToCloud(silent = true)
         }
     }
@@ -1072,13 +1078,13 @@ class SettingsViewModel @Inject constructor(
             val result = catalogRepository.addCustomCatalog(url)
             result.onSuccess { catalog ->
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = "Added ${catalog.title}",
+                    toastMessage = context.getString(R.string.catalog_added, catalog.title),
                     toastType = ToastType.SUCCESS
                 )
                 syncLocalStateToCloud(silent = true)
             }.onFailure { error ->
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = error.message ?: "Failed to add catalog",
+                    toastMessage = error.message ?: context.getString(R.string.catalog_add_failed),
                     toastType = ToastType.ERROR
                 )
             }
@@ -1090,13 +1096,13 @@ class SettingsViewModel @Inject constructor(
             val result = catalogRepository.updateCustomCatalog(catalogId, url)
             result.onSuccess { catalog ->
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = "Updated ${catalog.title}",
+                    toastMessage = context.getString(R.string.catalog_updated, catalog.title),
                     toastType = ToastType.SUCCESS
                 )
                 syncLocalStateToCloud(silent = true)
             }.onFailure { error ->
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = error.message ?: "Failed to update catalog",
+                    toastMessage = error.message ?: context.getString(R.string.catalog_update_failed),
                     toastType = ToastType.ERROR
                 )
             }
@@ -1111,13 +1117,13 @@ class SettingsViewModel @Inject constructor(
                 val updatedCatalogs = catalogRepository.getCatalogs()
                 _uiState.value = _uiState.value.copy(
                     catalogs = updatedCatalogs,
-                    toastMessage = "Catalog removed",
+                    toastMessage = context.getString(R.string.catalog_removed),
                     toastType = ToastType.SUCCESS
                 )
                 syncLocalStateToCloud(silent = true)
             }.onFailure { error ->
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = error.message ?: "Failed to remove catalog",
+                    toastMessage = error.message ?: context.getString(R.string.catalog_remove_failed),
                     toastType = ToastType.ERROR
                 )
             }
@@ -1153,7 +1159,7 @@ class SettingsViewModel @Inject constructor(
             val trimmedEpg = epgUrl.trim()
             if (trimmedM3u.isBlank()) {
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = "M3U URL is required",
+                    toastMessage = context.getString(R.string.iptv_url_required),
                     toastType = ToastType.ERROR
                 )
                 return@launch
@@ -1199,7 +1205,7 @@ class SettingsViewModel @Inject constructor(
         val usingXtream = user.isNotBlank() || pass.isNotBlank()
         if (usingXtream && (user.isBlank() || pass.isBlank())) {
             _uiState.value = _uiState.value.copy(
-                toastMessage = "Xtream requires both username and password",
+                toastMessage = context.getString(R.string.xtream_auth_required),
                 toastType = ToastType.ERROR
             )
             return
@@ -1280,7 +1286,7 @@ class SettingsViewModel @Inject constructor(
                 if (error is CancellationException) {
                     return@onFailure
                 }
-                val failMessage = if (configured) "Failed to load IPTV playlist" else "Failed to refresh IPTV"
+                val failMessage = if (configured) context.getString(R.string.iptv_load_failed) else context.getString(R.string.iptv_refresh_failed)
                 _uiState.value = _uiState.value.copy(
                     isIptvLoading = false,
                     iptvError = error.message ?: failMessage,
@@ -1310,11 +1316,11 @@ class SettingsViewModel @Inject constructor(
                 isIptvLoading = false,
                 iptvChannelCount = 0,
                 iptvError = null,
-                iptvStatusMessage = "IPTV playlist removed",
+                iptvStatusMessage = context.getString(R.string.iptv_playlist_removed),
                 iptvStatusType = ToastType.SUCCESS,
                 iptvProgressText = null,
                 iptvProgressPercent = 0,
-                toastMessage = "IPTV playlist removed",
+                toastMessage = context.getString(R.string.iptv_playlist_removed),
                 toastType = ToastType.SUCCESS
             )
             syncLocalStateToCloud(silent = true)
@@ -1356,7 +1362,7 @@ class SettingsViewModel @Inject constructor(
                     clearCloudAuthSession()
                     _uiState.value = _uiState.value.copy(
                         isCloudAuthWorking = false,
-                        toastMessage = error.message ?: "Failed to start cloud login",
+                        toastMessage = error.message ?: context.getString(R.string.cloud_login_start_failed),
                         toastType = ToastType.ERROR
                     )
                 }
@@ -1395,7 +1401,7 @@ class SettingsViewModel @Inject constructor(
                     _uiState.value = _uiState.value.copy(
                         showCloudEmailPasswordDialog = false,
                         isCloudAuthWorking = false,
-                        toastMessage = error.message ?: "Failed to start cloud sign-in",
+                        toastMessage = error.message ?: context.getString(R.string.cloud_login_start_failed),
                         toastType = ToastType.ERROR
                     )
                 }
@@ -1414,14 +1420,14 @@ class SettingsViewModel @Inject constructor(
         val trimmedEmail = email.trim()
         if (trimmedEmail.isBlank()) {
             _uiState.value = _uiState.value.copy(
-                toastMessage = "Email is required",
+                toastMessage = context.getString(R.string.email_required),
                 toastType = ToastType.ERROR
             )
             return
         }
         if (password.isBlank()) {
             _uiState.value = _uiState.value.copy(
-                toastMessage = "Password is required",
+                toastMessage = context.getString(R.string.password_required),
                 toastType = ToastType.ERROR
             )
             return
@@ -1433,7 +1439,7 @@ class SettingsViewModel @Inject constructor(
             if (sessionReady.isFailure) {
                 clearCloudAuthSession()
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = sessionReady.exceptionOrNull()?.message ?: "Cloud sign-in could not start. Try again.",
+                    toastMessage = sessionReady.exceptionOrNull()?.message ?: context.getString(R.string.cloud_login_start_failed),
                     toastType = ToastType.ERROR,
                     isCloudAuthWorking = false
                 )
@@ -1444,7 +1450,7 @@ class SettingsViewModel @Inject constructor(
             if (userCode.isNullOrBlank()) {
                 clearCloudAuthSession()
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = "Cloud sign-in session was unavailable. Try again.",
+                    toastMessage = context.getString(R.string.cloud_sign_in_session_was_unavailable_try_again),
                     toastType = ToastType.ERROR,
                     isCloudAuthWorking = false
                 )
@@ -1458,7 +1464,7 @@ class SettingsViewModel @Inject constructor(
                 intent = if (createAccount) "signup" else "signin"
             ).onSuccess {
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = "Waiting for approval...",
+                    toastMessage = context.getString(R.string.waiting_approval),
                     toastType = ToastType.INFO,
                     showCloudEmailPasswordDialog = false,
                     isCloudAuthWorking = true
@@ -1514,7 +1520,7 @@ class SettingsViewModel @Inject constructor(
                                 showCloudEmailPasswordDialog = false,
                                 cloudUserCode = null,
                                 cloudVerificationUrl = null,
-                                toastMessage = "Signed in successfully",
+                                toastMessage = context.getString(R.string.sign_in_success),
                                 toastType = ToastType.SUCCESS
                             )
                             return@launch
@@ -1534,7 +1540,7 @@ class SettingsViewModel @Inject constructor(
                             showCloudEmailPasswordDialog = false,
                             cloudUserCode = null,
                             cloudVerificationUrl = null,
-                            toastMessage = status.message ?: "Cloud sign-in expired. Try again.",
+                            toastMessage = status.message ?: context.getString(R.string.cloud_sign_in_expired_try_again),
                             toastType = ToastType.ERROR
                         )
                         clearCloudAuthSession(cancelPolling = false)
@@ -1543,7 +1549,7 @@ class SettingsViewModel @Inject constructor(
                     TvDeviceAuthStatusType.ERROR -> {
                         _uiState.value = _uiState.value.copy(
                             isCloudAuthWorking = false,
-                            toastMessage = status.message ?: "Cloud sign-in failed. Try again.",
+                            toastMessage = status.message ?: context.getString(R.string.cloud_sign_in_failed_try_again),
                             toastType = ToastType.ERROR
                         )
                         return@launch
@@ -1555,7 +1561,7 @@ class SettingsViewModel @Inject constructor(
 
             _uiState.value = _uiState.value.copy(
                 isCloudAuthWorking = false,
-                toastMessage = "Sign-in did not complete. Try again.",
+                toastMessage = context.getString(R.string.sign_in_failed),
                 toastType = ToastType.ERROR
             )
             clearCloudAuthSession(cancelPolling = false)
@@ -1620,7 +1626,7 @@ class SettingsViewModel @Inject constructor(
 
             if (!silent && result.isSuccess) {
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = "Cloud sync complete",
+                    toastMessage = context.getString(R.string.cloud_sync_complete),
                     toastType = ToastType.SUCCESS
                 )
             } else if (!silent && result.isFailure) {
@@ -1646,7 +1652,7 @@ class SettingsViewModel @Inject constructor(
                 runCatching { launcherContinueWatchingRepository.refreshForCurrentProfile() }
                 if (!silent) {
                     _uiState.value = _uiState.value.copy(
-                        toastMessage = "Cloud restore complete",
+                        toastMessage = context.getString(R.string.cloud_restore_complete),
                         toastType = ToastType.SUCCESS
                     )
                 }
@@ -1655,7 +1661,7 @@ class SettingsViewModel @Inject constructor(
             CloudSyncRepository.RestoreResult.NO_BACKUP -> {
                 if (!silent) {
                     _uiState.value = _uiState.value.copy(
-                        toastMessage = "No cloud backup found",
+                        toastMessage = context.getString(R.string.no_cloud_backup),
                         toastType = ToastType.INFO
                     )
                 }
@@ -1664,7 +1670,7 @@ class SettingsViewModel @Inject constructor(
             CloudSyncRepository.RestoreResult.FAILED -> {
                 if (!silent) {
                     _uiState.value = _uiState.value.copy(
-                        toastMessage = "Cloud restore failed",
+                        toastMessage = context.getString(R.string.cloud_restore_failed),
                         toastType = ToastType.ERROR
                     )
                 }
@@ -1748,14 +1754,14 @@ class SettingsViewModel @Inject constructor(
         val update = _uiState.value.availableAppUpdate ?: return
         if (!appUpdateRepository.supportsSelfUpdate()) {
             _uiState.value = _uiState.value.copy(
-                toastMessage = "This install is managed by the Play Store.",
+                toastMessage = context.getString(R.string.app_update_managed_play),
                 toastType = ToastType.INFO
             )
             return
         }
         if (!_uiState.value.isAppUpdateAvailable) {
             _uiState.value = _uiState.value.copy(
-                toastMessage = "You already have the latest version",
+                toastMessage = context.getString(R.string.latest_version),
                 toastType = ToastType.INFO,
                 showAppUpdateDialog = true,
                 downloadedApkPath = null
@@ -1892,7 +1898,7 @@ class SettingsViewModel @Inject constructor(
                         traktCode = null,
                         isTraktPolling = false,
                         traktExpiration = expirationDate,
-                        toastMessage = "Trakt connected successfully",
+                        toastMessage = context.getString(R.string.trakt_connected),
                         toastType = ToastType.SUCCESS
                     )
                     traktRepository.clearContinueWatchingCache()
@@ -1938,7 +1944,7 @@ class SettingsViewModel @Inject constructor(
             traktRepository.logout()
             _uiState.value = _uiState.value.copy(
                 isTraktAuthenticated = false,
-                toastMessage = "Trakt disconnected",
+                toastMessage = context.getString(R.string.trakt_disconnected),
                 toastType = ToastType.SUCCESS
             )
             syncLocalStateToCloud(silent = true, force = true)
@@ -1954,7 +1960,7 @@ class SettingsViewModel @Inject constructor(
             cancelCloudAuth()
             authRepository.signOut()
             _uiState.value = _uiState.value.copy(
-                toastMessage = "Signed out",
+                toastMessage = context.getString(R.string.signed_out),
                 toastType = ToastType.SUCCESS
             )
         }

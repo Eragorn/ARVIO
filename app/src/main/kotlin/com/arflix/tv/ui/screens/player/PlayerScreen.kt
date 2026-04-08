@@ -11,6 +11,7 @@ import android.net.Uri
 import android.os.Build
 import com.arflix.tv.BuildConfig
 import androidx.activity.compose.BackHandler
+import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
@@ -150,6 +151,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.res.stringResource
 import okhttp3.Cookie
 import okhttp3.CookieJar
 import okhttp3.HttpUrl
@@ -157,13 +160,13 @@ import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.dash.DashMediaSource
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import com.arflix.tv.R
 
 /**
  * Netflix-style Player UI for Android TV
@@ -705,7 +708,7 @@ fun PlayerScreen(
                                         }
                                     }
                                     val lang = format.language ?: matched?.lang ?: "und"
-                                    val label = format.label ?: matched?.label ?: getFullLanguageName(lang)
+                                    val label = format.label ?: matched?.label ?: getFullLanguageName(lang)?.let { context.getString(it) } ?: lang
                                     val isExternal = matched?.url?.isNotBlank() == true
                                     textTracks.add(Subtitle(
                                         id = matched?.id ?: formatTrackId.ifBlank { "embedded_${groupIndex}_$i" },
@@ -1209,9 +1212,9 @@ fun PlayerScreen(
                         viewModel.onSelectedStreamPlaybackFailure()
                         viewModel.reportPlaybackError(
                             if (autoAdvanceAttempts > 0 || startupSameSourceRetryCount > 0) {
-                                "Source did not start after retries/fallback. Try another source."
+                                context.getString(R.string.player_error_retry)
                             } else {
-                                "Source did not start in time. Try another source."
+                                context.getString(R.string.player_error_timeout)
                             }
                         )
                     }
@@ -1442,9 +1445,9 @@ fun PlayerScreen(
     val subtitleSizePref = uiState.subtitleSize
     val subtitleColorPref = uiState.subtitleColor
     val aspectModeLabel = when (playerResizeMode) {
-        AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> "Zoom"
-        AspectRatioFrameLayout.RESIZE_MODE_FILL -> "Fill"
-        else -> "Fit"
+        AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> context.getString(R.string.player_zoom)
+        AspectRatioFrameLayout.RESIZE_MODE_FILL -> context.getString(R.string.player_fill)
+        else -> context.getString(R.string.player_fit)
     }
     val cycleAspectRatio: () -> Unit = {
         playerResizeMode = when (playerResizeMode) {
@@ -1982,7 +1985,7 @@ fun PlayerScreen(
                             Text(currentTime.value, style = ArflixTypography.body.copy(fontSize = 18.sp, fontWeight = FontWeight.Medium), color = TextSecondary, maxLines = 1)
                         }
                         if (endsAtTime.value.isNotBlank()) {
-                            Text("Ends at ${endsAtTime.value}", style = ArflixTypography.caption.copy(fontSize = 12.sp), color = TextSecondary.copy(alpha = 0.7f), maxLines = 1, modifier = Modifier.padding(top = 2.dp))
+                            Text(context.getString(R.string.player_ends_at, endsAtTime.value), style = ArflixTypography.caption.copy(fontSize = 12.sp), color = TextSecondary.copy(alpha = 0.7f), maxLines = 1, modifier = Modifier.padding(top = 2.dp))
                         }
                     }
                 }
@@ -2064,7 +2067,7 @@ fun PlayerScreen(
                         }
 
                         // Subtitles
-                        PlayerIconButton(icon = Icons.Default.ClosedCaption, contentDescription = "Subtitles & Audio",
+                        PlayerIconButton(icon = Icons.Default.ClosedCaption, contentDescription = context.getString(R.string.player_subtitles_audio),
                             focusRequester = subtitleButtonFocusRequester, size = smallBtn, iconSize = smallIcon,
                             onFocusChanged = { if (it) focusedButton = 1 },
                             onClick = { showSubtitleMenu = true; subtitleMenuIndex = 0 },
@@ -2075,7 +2078,7 @@ fun PlayerScreen(
                         Spacer(modifier = Modifier.width(gap))
 
                         // Sources
-                        PlayerIconButton(icon = Icons.Default.Folder, contentDescription = "Sources",
+                        PlayerIconButton(icon = Icons.Default.Folder, contentDescription = stringResource(R.string.sources),
                             focusRequester = sourceButtonFocusRequester, size = smallBtn, iconSize = smallIcon,
                             onFocusChanged = {},
                             onClick = { showSourceMenu = true; showControls = true },
@@ -2087,7 +2090,7 @@ fun PlayerScreen(
                             Spacer(modifier = Modifier.width(wideGap))
 
                             // Rewind 10s
-                            PlayerIconButton(icon = Icons.Default.Replay10, contentDescription = "Rewind 10s",
+                            PlayerIconButton(icon = Icons.Default.Replay10, contentDescription = stringResource(R.string.rewind_10s),
                                 focusRequester = rewindButtonFocusRequester, size = midBtn, iconSize = midIcon,
                                 onFocusChanged = {},
                                 onClick = { queueControlsSeek(-10_000L) },
@@ -2102,7 +2105,7 @@ fun PlayerScreen(
 
                         // Play/Pause - center, largest
                         PlayerIconButton(icon = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = if (isPlaying) "Pause" else "Play",
+                            contentDescription = if (isPlaying) stringResource(R.string.pause) else stringResource(R.string.play),
                             focusRequester = playButtonFocusRequester, size = bigBtn, iconSize = bigIcon,
                             onFocusChanged = { if (it) focusedButton = 0 },
                             onClick = { if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play() },
@@ -2115,7 +2118,7 @@ fun PlayerScreen(
                             Spacer(modifier = Modifier.width(gap))
 
                             // Forward 10s - own focus requester
-                            PlayerIconButton(icon = Icons.Default.Forward10, contentDescription = "Forward 10s",
+                            PlayerIconButton(icon = Icons.Default.Forward10, contentDescription = stringResource(R.string.forward_10s),
                                 focusRequester = forwardButtonFocusRequester, size = midBtn, iconSize = midIcon,
                                 onFocusChanged = {},
                                 onClick = { queueControlsSeek(10_000L) },
@@ -2129,7 +2132,10 @@ fun PlayerScreen(
                         }
 
                         // Aspect Ratio
-                        PlayerIconButton(icon = Icons.Default.AspectRatio, contentDescription = "Aspect: $aspectModeLabel",
+                        PlayerIconButton(icon = Icons.Default.AspectRatio, contentDescription = stringResource(
+                            R.string.aspect,
+                            aspectModeLabel
+                        ),
                             focusRequester = aspectButtonFocusRequester, size = smallBtn, iconSize = smallIcon,
                             onFocusChanged = {},
                             onClick = cycleAspectRatio,
@@ -2139,7 +2145,7 @@ fun PlayerScreen(
 
                         if (mediaType == MediaType.TV) {
                             Spacer(modifier = Modifier.width(gap))
-                            PlayerIconButton(icon = Icons.Default.SkipNext, contentDescription = "Next Episode",
+                            PlayerIconButton(icon = Icons.Default.SkipNext, contentDescription =  stringResource(R.string.next_episode),
                                 focusRequester = nextEpisodeButtonFocusRequester, size = smallBtn, iconSize = smallIcon,
                                 onFocusChanged = {},
                                 onClick = {
@@ -2387,7 +2393,7 @@ fun PlayerScreen(
                         currentVolume < maxVolume / 2 -> Icons.Default.VolumeDown
                         else -> Icons.Default.VolumeUp
                     },
-                    contentDescription = "Volume",
+                    contentDescription = stringResource(R.string.volume),
                     tint = Color.White,
                     modifier = Modifier.size(32.dp)
                 )
@@ -2408,7 +2414,7 @@ fun PlayerScreen(
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = if (isMuted) "Muted" else "${currentVolume * 100 / maxVolume}%",
+                    text = if (isMuted) stringResource(R.string.muted) else "${currentVolume * 100 / maxVolume}%",
                     style = ArflixTypography.caption,
                     color = Color.White
                 )
@@ -2520,7 +2526,7 @@ fun PlayerScreen(
                     ) {
                         Icon(
                             imageVector = if (isSetup) Icons.Default.Settings else Icons.Default.ErrorOutline,
-                            contentDescription = if (isSetup) "Setup" else "Error",
+                            contentDescription = if (isSetup) stringResource(R.string.setup) else stringResource(R.string.error),
                             tint = accentColor,
                             modifier = Modifier.size(40.dp)
                         )
@@ -2529,7 +2535,7 @@ fun PlayerScreen(
                     Spacer(modifier = Modifier.height(24.dp))
 
                     Text(
-                        text = if (isSetup) "Addon Setup Required" else "Playback Error",
+                        text = if (isSetup) stringResource(R.string.addon_setup_required) else stringResource(R.string.playback_error),
                         style = ArflixTypography.sectionTitle,
                         color = TextPrimary
                     )
@@ -2537,7 +2543,7 @@ fun PlayerScreen(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Text(
-                        text = uiState.error ?: "An unknown error occurred",
+                        text = uiState.error ?: stringResource(R.string.an_unknown_error_occurred),
                         style = ArflixTypography.body,
                         color = TextSecondary,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -2547,7 +2553,7 @@ fun PlayerScreen(
                     if (isSetup) {
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "ARVIO uses community streaming addons to find video sources. Without at least one streaming addon, content cannot be played.",
+                            text = stringResource(R.string.arvio_uses_community_streaming_addons_to_find_video_sources_without_at_least_one_streaming_addon_content_cannot_be_played),
                             style = ArflixTypography.caption,
                             color = TextSecondary.copy(alpha = 0.7f),
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -2560,7 +2566,7 @@ fun PlayerScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         if (!isSetup) {
                             ErrorButton(
-                                text = "TRY AGAIN",
+                                text = stringResource(R.string.try_again),
                                 icon = Icons.Default.Refresh,
                                 isFocused = errorModalFocusIndex == 0,
                                 isPrimary = true,
@@ -2568,7 +2574,7 @@ fun PlayerScreen(
                             )
                         }
                         ErrorButton(
-                            text = "GO BACK",
+                            text = stringResource(R.string.go_back),
                             isFocused = if (isSetup) errorModalFocusIndex == 0 else errorModalFocusIndex == 1,
                             isPrimary = isSetup,
                             onClick = onBack
@@ -2794,53 +2800,57 @@ private fun applyAudioTrackSelection(
 /**
  * Language code to full name mapping
  */
-private fun getFullLanguageName(code: String?): String {
-    if (code == null) return "Unknown"
-    val normalizedCode = code.lowercase().trim()
-    return when {
-        normalizedCode == "en" || normalizedCode == "eng" || normalizedCode == "english" -> "English"
-        normalizedCode == "es" || normalizedCode == "spa" || normalizedCode == "spanish" -> "Spanish"
-        normalizedCode == "nl" || normalizedCode == "nld" || normalizedCode == "dut" || normalizedCode == "dutch" -> "Dutch"
-        normalizedCode == "de" || normalizedCode == "ger" || normalizedCode == "deu" || normalizedCode == "german" -> "German"
-        normalizedCode == "fr" || normalizedCode == "fra" || normalizedCode == "fre" || normalizedCode == "french" -> "French"
-        normalizedCode == "it" || normalizedCode == "ita" || normalizedCode == "italian" -> "Italian"
-        normalizedCode == "pt" || normalizedCode == "por" || normalizedCode == "portuguese" -> "Portuguese"
-        normalizedCode == "pt-br" || normalizedCode == "pob" -> "Portuguese (Brazil)"
-        normalizedCode == "ru" || normalizedCode == "rus" || normalizedCode == "russian" -> "Russian"
-        normalizedCode == "ja" || normalizedCode == "jpn" || normalizedCode == "japanese" -> "Japanese"
-        normalizedCode == "ko" || normalizedCode == "kor" || normalizedCode == "korean" -> "Korean"
-        normalizedCode == "zh" || normalizedCode == "chi" || normalizedCode == "zho" || normalizedCode == "chinese" -> "Chinese"
-        normalizedCode == "ar" || normalizedCode == "ara" || normalizedCode == "arabic" -> "Arabic"
-        normalizedCode == "hi" || normalizedCode == "hin" || normalizedCode == "hindi" -> "Hindi"
-        normalizedCode == "tr" || normalizedCode == "tur" || normalizedCode == "turkish" -> "Turkish"
-        normalizedCode == "pl" || normalizedCode == "pol" || normalizedCode == "polish" -> "Polish"
-        normalizedCode == "sv" || normalizedCode == "swe" || normalizedCode == "swedish" -> "Swedish"
-        normalizedCode == "no" || normalizedCode == "nor" || normalizedCode == "norwegian" -> "Norwegian"
-        normalizedCode == "da" || normalizedCode == "dan" || normalizedCode == "danish" -> "Danish"
-        normalizedCode == "fi" || normalizedCode == "fin" || normalizedCode == "finnish" -> "Finnish"
-        normalizedCode == "cs" || normalizedCode == "cze" || normalizedCode == "ces" || normalizedCode == "czech" -> "Czech"
-        normalizedCode == "hu" || normalizedCode == "hun" || normalizedCode == "hungarian" -> "Hungarian"
-        normalizedCode == "ro" || normalizedCode == "ron" || normalizedCode == "rum" || normalizedCode == "romanian" -> "Romanian"
-        normalizedCode == "el" || normalizedCode == "gre" || normalizedCode == "ell" || normalizedCode == "greek" -> "Greek"
-        normalizedCode == "he" || normalizedCode == "heb" || normalizedCode == "hebrew" -> "Hebrew"
-        normalizedCode == "th" || normalizedCode == "tha" || normalizedCode == "thai" -> "Thai"
-        normalizedCode == "vi" || normalizedCode == "vie" || normalizedCode == "vietnamese" -> "Vietnamese"
-        normalizedCode == "id" || normalizedCode == "ind" || normalizedCode == "indonesian" -> "Indonesian"
-        normalizedCode == "ms" || normalizedCode == "msa" || normalizedCode == "may" || normalizedCode == "malay" -> "Malay"
-        normalizedCode == "uk" || normalizedCode == "ukr" || normalizedCode == "ukrainian" -> "Ukrainian"
-        normalizedCode == "bg" || normalizedCode == "bul" || normalizedCode == "bulgarian" -> "Bulgarian"
-        normalizedCode == "hr" || normalizedCode == "hrv" || normalizedCode == "croatian" -> "Croatian"
-        normalizedCode == "sr" || normalizedCode == "srp" || normalizedCode == "serbian" -> "Serbian"
-        normalizedCode == "sk" || normalizedCode == "slo" || normalizedCode == "slk" || normalizedCode == "slovak" -> "Slovak"
-        normalizedCode == "sl" || normalizedCode == "slv" || normalizedCode == "slovenian" -> "Slovenian"
-        normalizedCode == "et" || normalizedCode == "est" || normalizedCode == "estonian" -> "Estonian"
-        normalizedCode == "lv" || normalizedCode == "lav" || normalizedCode == "latvian" -> "Latvian"
-        normalizedCode == "lt" || normalizedCode == "lit" || normalizedCode == "lithuanian" -> "Lithuanian"
-        normalizedCode == "fa" || normalizedCode == "per" || normalizedCode == "fas" || normalizedCode == "persian" -> "Persian"
-        normalizedCode == "kur" || normalizedCode == "ku" || normalizedCode == "kurdish" -> "Kurdish"
-        normalizedCode == "mon" || normalizedCode == "mn" || normalizedCode == "mongolian" -> "Mongolian"
-        normalizedCode == "und" || normalizedCode == "unknown" -> "Unknown"
-        else -> code.uppercase()
+
+@StringRes
+private fun getFullLanguageName(code: String?): Int? {
+    if (code.isNullOrBlank()) return null
+
+    val normalized = code.lowercase().trim()
+
+    return when (normalized) {
+        "en", "eng", "english" -> R.string.lang_english
+        "es", "spa", "spanish" -> R.string.lang_spanish
+        "nl", "nld", "dut", "dutch" -> R.string.lang_dutch
+        "de", "ger", "deu", "german" -> R.string.lang_german
+        "fr", "fra", "fre", "french" -> R.string.lang_french
+        "it", "ita", "italian" -> R.string.lang_italian
+        "pt", "por", "portuguese" -> R.string.lang_portuguese
+        "pt-br", "pob" -> R.string.lang_portuguese_brazil
+        "ru", "rus", "russian" -> R.string.lang_russian
+        "ja", "jpn", "japanese" -> R.string.lang_japanese
+        "ko", "kor", "korean" -> R.string.lang_korean
+        "zh", "chi", "zho", "chinese" -> R.string.lang_chinese
+        "ar", "ara", "arabic" -> R.string.lang_arabic
+        "hi", "hin", "hindi" -> R.string.lang_hindi
+        "tr", "tur", "turkish" -> R.string.lang_turkish
+        "pl", "pol", "polish" -> R.string.lang_polish
+        "sv", "swe", "swedish" -> R.string.lang_swedish
+        "no", "nor", "norwegian" -> R.string.lang_norwegian
+        "da", "dan", "danish" -> R.string.lang_danish
+        "fi", "fin", "finnish" -> R.string.lang_finnish
+        "cs", "cze", "ces", "czech" -> R.string.lang_czech
+        "hu", "hun", "hungarian" -> R.string.lang_hungarian
+        "ro", "ron", "rum", "romanian" -> R.string.lang_romanian
+        "el", "gre", "ell", "greek" -> R.string.lang_greek
+        "he", "heb", "hebrew" -> R.string.lang_hebrew
+        "th", "tha", "thai" -> R.string.lang_thai
+        "vi", "vie", "vietnamese" -> R.string.lang_vietnamese
+        "id", "ind", "indonesian" -> R.string.lang_indonesian
+        "ms", "msa", "may", "malay" -> R.string.lang_malay
+        "uk", "ukr", "ukrainian" -> R.string.lang_ukrainian
+        "bg", "bul", "bulgarian" -> R.string.lang_bulgarian
+        "hr", "hrv", "croatian" -> R.string.lang_croatian
+        "sr", "srp", "serbian" -> R.string.lang_serbian
+        "sk", "slo", "slk", "slovak" -> R.string.lang_slovak
+        "sl", "slv", "slovenian" -> R.string.lang_slovenian
+        "et", "est", "estonian" -> R.string.lang_estonian
+        "lv", "lav", "latvian" -> R.string.lang_latvian
+        "lt", "lit", "lithuanian" -> R.string.lang_lithuanian
+        "fa", "per", "fas", "persian" -> R.string.lang_persian
+        "kur", "ku", "kurdish" -> R.string.lang_kurdish
+        "mon", "mn", "mongolian" -> R.string.lang_mongolian
+        "und", "unknown" -> R.string.unknown
+        else -> null
     }
 }
 
@@ -2959,12 +2969,12 @@ private fun SubtitleMenu(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     TabButton(
-                        text = "Subtitles",
+                        text = stringResource(R.string.subtitles),
                         isSelected = activeTab == 0,
                         onClick = { onTabChanged(0) }
                     )
                     TabButton(
-                        text = "Audio",
+                        text = stringResource(R.string.audio),
                         isSelected = activeTab == 1,
                         onClick = { onTabChanged(1) }
                     )
@@ -2981,7 +2991,7 @@ private fun SubtitleMenu(
                         ) {
                             item {
                                 TrackMenuItem(
-                                    label = "Off",
+                                    label = stringResource(R.string.off),
                                     subtitle = null,
                                     isSelected = selectedSubtitle == null,
                                     isFocused = focusedIndex == 0,
@@ -2992,7 +3002,8 @@ private fun SubtitleMenu(
                             itemsIndexed(subtitles) { index, subtitle ->
                                 // Use actual track label as main text, full language name as secondary
                                 val trackLabel = subtitle.label.ifBlank { subtitle.lang }
-                                val languageInfo = getFullLanguageName(subtitle.lang)
+                                val languageResId = getFullLanguageName(subtitle.lang)
+                                val languageInfo = languageResId?.let { stringResource(it) } ?: subtitle.lang
                                 // Only show language info if different from label
                                 val subtitleInfo = if (trackLabel.lowercase() != languageInfo.lowercase() &&
                                                        !trackLabel.lowercase().contains(languageInfo.lowercase())) {
@@ -3026,7 +3037,8 @@ private fun SubtitleMenu(
                             } else {
                                 itemsIndexed(audioTracks) { index, track ->
                                     // Use track label if available, otherwise full language name
-                                    val languageName = getFullLanguageName(track.language)
+                                    val languageResId= getFullLanguageName(track.language)
+                                    val languageName = stringResource(languageResId?: R.string.unknown)
                                     val trackLabel = track.label?.takeIf { it.isNotBlank() } ?: languageName
 
                                     val codecInfo = detectAudioCodecLabel(track.codec, trackLabel)
@@ -3061,7 +3073,7 @@ private fun SubtitleMenu(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "← → Switch tabs • ↑↓ Navigate • BACK Close",
+                        text = stringResource(R.string.switch_tabs_navigate_back_close),
                         style = ArflixTypography.caption,
                         color = TextSecondary.copy(alpha = 0.5f)
                     )
@@ -3106,7 +3118,7 @@ private fun SubtitleMenu(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = if (mobileTab == 0) "Subtitles" else "Audio",
+                        text = if (mobileTab == 0) stringResource(R.string.subtitles) else stringResource(R.string.audio),
                         style = ArflixTypography.body.copy(
                             fontSize = 16.sp,
                             fontWeight = FontWeight.SemiBold
@@ -3124,7 +3136,7 @@ private fun SubtitleMenu(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
-                            contentDescription = "Close",
+                            contentDescription = stringResource(R.string.close),
                             tint = Color.White,
                             modifier = Modifier.size(22.dp)
                         )
@@ -3138,7 +3150,7 @@ private fun SubtitleMenu(
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    listOf("Subtitles" to 0, "Audio" to 1).forEach { (label, tabIndex) ->
+                    listOf(stringResource(R.string.subtitles) to 0, stringResource(R.string.audio) to 1).forEach { (label, tabIndex) ->
                         val selected = mobileTab == tabIndex
                         Box(
                             modifier = Modifier
@@ -3192,7 +3204,7 @@ private fun SubtitleMenu(
                         // "Off" option
                         item {
                             MobileTrackItem(
-                                name = "Off",
+                                name = stringResource(R.string.off),
                                 description = null,
                                 isSelected = selectedSubtitle == null,
                                 onClick = { onSelectSubtitle(0) }
@@ -3209,7 +3221,7 @@ private fun SubtitleMenu(
 
                         itemsIndexed(subtitles) { index, sub ->
                             val trackLabel = sub.label.ifBlank { sub.lang }
-                            val languageInfo = getFullLanguageName(sub.lang)
+                            val languageInfo = getFullLanguageName(sub.lang)?.let { stringResource(it) } ?: sub.lang
                             val description = if (trackLabel.lowercase() != languageInfo.lowercase() &&
                                 !trackLabel.lowercase().contains(languageInfo.lowercase())
                             ) languageInfo else null
@@ -3236,7 +3248,7 @@ private fun SubtitleMenu(
                         if (audioTracks.isEmpty()) {
                             item {
                                 Text(
-                                    text = "No audio tracks available",
+                                    text = stringResource(R.string.no_audio_track),
                                     style = ArflixTypography.body.copy(fontSize = 14.sp),
                                     color = TextSecondary,
                                     modifier = Modifier.padding(16.dp)
@@ -3244,7 +3256,7 @@ private fun SubtitleMenu(
                             }
                         } else {
                             itemsIndexed(audioTracks) { index, track ->
-                                val languageName = getFullLanguageName(track.language)
+                                val languageName =  stringResource(getFullLanguageName(track.language) ?: R.string.unknown)
                                 val trackLabel = track.label?.takeIf { it.isNotBlank() } ?: languageName
                                 val codecInfo = detectAudioCodecLabel(track.codec, trackLabel)
                                 val channelInfo = when (track.channelCount) {
@@ -3355,7 +3367,7 @@ private fun TrackMenuItem(
         if (isSelected) {
             Icon(
                 imageVector = Icons.Default.Check,
-                contentDescription = "Selected",
+                contentDescription =stringResource(R.string.selected) ,
                 tint = if (isFocused) Color.Black else Color.White,
                 modifier = Modifier.size(18.dp)
             )
@@ -3405,7 +3417,7 @@ private fun MobileTrackItem(
         if (isSelected) {
             Icon(
                 imageVector = Icons.Default.Check,
-                contentDescription = "Selected",
+                contentDescription = stringResource(R.string.selected),
                 tint = Color(0xFF4CAF50), // Green checkmark
                 modifier = Modifier
                     .padding(start = 12.dp)
@@ -3425,7 +3437,7 @@ private fun SubtitleMenuItem(
     onClick: () -> Unit
 ) {
     TrackMenuItem(
-        label = getFullLanguageName(label),
+        label = getFullLanguageName(label)?.let { stringResource(it) } ?: label,
         subtitle = null,
         isSelected = isSelected,
         isFocused = isFocused,

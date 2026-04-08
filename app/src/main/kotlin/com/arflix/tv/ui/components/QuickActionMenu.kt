@@ -42,8 +42,10 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.res.stringResource
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.arflix.tv.R
 import com.arflix.tv.ui.skin.ArvioSkin
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -129,13 +131,13 @@ fun QuickActionMenu(
             ) {
                 QuickActionTile(
                     icon = if (isWatched) Icons.Default.Check else Icons.Default.Visibility,
-                    label = if (isWatched) "Watched" else "Mark Watched",
+                    label = if (isWatched) stringResource(R.string.watched) else stringResource(R.string.mark_as_watched),
                     isFocused = focusedIndex == 0,
                     isEnabled = true
                 )
                 QuickActionTile(
                     icon = Icons.Default.Close,
-                    label = "Remove Continue Watching",
+                    label = stringResource(R.string.removed_from_continue_watching),
                     isFocused = focusedIndex == 1,
                     isEnabled = canRemoveContinueWatching
                 )

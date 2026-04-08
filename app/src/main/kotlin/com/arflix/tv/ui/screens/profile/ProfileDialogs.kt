@@ -46,6 +46,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -58,6 +59,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import com.arflix.tv.R
 import com.arflix.tv.data.model.Profile
 import com.arflix.tv.data.model.ProfileColors
 import com.arflix.tv.ui.components.AvatarIcon
@@ -81,7 +83,7 @@ fun AddProfileDialog(
     onDismiss: () -> Unit
 ) {
     ProfileDialogContent(
-        title = "Add Profile",
+        title = stringResource(R.string.add_profile),
         autoFocusNameInput = true,
         name = name,
         onNameChange = onNameChange,
@@ -89,7 +91,7 @@ fun AddProfileDialog(
         onColorSelected = onColorSelected,
         selectedAvatarId = selectedAvatarId,
         onAvatarSelected = onAvatarSelected,
-        confirmLabel = "Create",
+        confirmLabel = stringResource(R.string.create),
         onConfirm = onConfirm,
         onDismiss = onDismiss,
         onDelete = null
@@ -115,7 +117,7 @@ fun EditProfileDialog(
     onDismiss: () -> Unit
 ) {
     ProfileDialogContent(
-        title = "Edit Profile",
+        title = stringResource(R.string.edit_profile),
         autoFocusNameInput = false,
         name = name,
         onNameChange = onNameChange,
@@ -123,7 +125,7 @@ fun EditProfileDialog(
         onColorSelected = onColorSelected,
         selectedAvatarId = selectedAvatarId,
         onAvatarSelected = onAvatarSelected,
-        confirmLabel = "Save",
+        confirmLabel = stringResource(R.string.save),
         onConfirm = onConfirm,
         onDismiss = onDismiss,
         onDelete = onDelete
@@ -341,7 +343,7 @@ private fun ProfileDialogContent(
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             DialogButton(
-                                text = "Cancel",
+                                text = stringResource(R.string.cancel),
                                 isPrimary = false,
                                 onClick = {
                                     hideKeyboard()
@@ -351,7 +353,7 @@ private fun ProfileDialogContent(
                             )
                             if (onDelete != null) {
                                 DialogButton(
-                                    text = "Delete",
+                                    text = stringResource(R.string.delete),
                                     isPrimary = false,
                                     isDestructive = true,
                                     onClick = {
@@ -469,7 +471,7 @@ private fun AvatarGridItem(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Check,
-                        contentDescription = "Selected",
+                        contentDescription = stringResource(R.string.selected),
                         tint = Color.White,
                         modifier = Modifier.size(22.dp)
                     )

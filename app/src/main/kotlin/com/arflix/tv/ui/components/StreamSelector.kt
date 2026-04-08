@@ -1,5 +1,6 @@
 package com.arflix.tv.ui.components
 
+import android.content.Context
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -65,6 +66,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -73,6 +75,7 @@ import androidx.tv.foundation.lazy.list.TvLazyColumn
 import androidx.tv.foundation.lazy.list.rememberTvLazyListState
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.arflix.tv.R
 import com.arflix.tv.data.model.StreamSource
 import com.arflix.tv.ui.theme.ArflixTypography
 import com.arflix.tv.util.LocalDeviceType
@@ -146,9 +149,10 @@ fun StreamSelector(
         }
     }
 
+    val allSourcesLabel = stringResource(R.string.all_sources)
     // Tab labels: "All sources" + addon labels
-    val tabLabels = remember(addonTabs) {
-        listOf("All sources") + addonTabs.map { it.label }
+    val tabLabels = remember(addonTabs,allSourcesLabel) {
+        listOf(allSourcesLabel) + addonTabs.map { it.label }
     }
 
     val presentations = remember(streams) { streams.map(::presentSource) }
@@ -300,7 +304,7 @@ fun StreamSelector(
                         // Header without icon
                         Column(modifier = Modifier.padding(bottom = 20.dp)) {
                             Text(
-                                text = "Sources",
+                                text = stringResource(R.string.sources),
                                 style = ArflixTypography.label.copy(
                                     fontSize = 12.sp,
                                     letterSpacing = 1.sp
@@ -308,7 +312,7 @@ fun StreamSelector(
                                 color = TextSecondary
                             )
                             Text(
-                                text = title.ifEmpty { "Select Source" },
+                                text = title.ifEmpty { stringResource(R.string.select_source) },
                                 style = ArflixTypography.body.copy(
                                     fontSize = 18.sp,
                                     fontWeight = FontWeight.Bold
@@ -363,7 +367,7 @@ fun StreamSelector(
                         if (tabLabels.size > 1) {
                             Spacer(modifier = Modifier.height(20.dp))
                             Text(
-                                text = "FILTER BY SOURCE",
+                                text = stringResource(R.string.filter_by_source),
                                 style = ArflixTypography.label.copy(
                                     fontSize = 10.sp,
                                     letterSpacing = 1.sp
@@ -397,7 +401,7 @@ fun StreamSelector(
                 ) {
                     // Header
                     Text(
-                        text = "Available Sources",
+                        text = stringResource(R.string.available_sources),
                         style = ArflixTypography.body.copy(
                             fontSize = 16.sp,
                             fontWeight = FontWeight.SemiBold
@@ -415,7 +419,7 @@ fun StreamSelector(
                                 LoadingIndicator(color = Pink, size = 48.dp)
                                 Spacer(modifier = Modifier.height(16.dp))
                                 Text(
-                                    text = "Finding sources...",
+                                    text = stringResource(R.string.finding_sources),
                                     style = ArflixTypography.body.copy(fontSize = 14.sp),
                                     color = TextSecondary
                                 )
@@ -449,7 +453,9 @@ fun StreamSelector(
                                 }
                                 Spacer(modifier = Modifier.height(16.dp))
                                 Text(
-                                    text = if (!hasStreamingAddons) "No Streaming Addons" else "No sources found",
+                                    text = if (!hasStreamingAddons) stringResource(R.string.no_streaming_addons) else stringResource(
+                                        R.string.no_sources_found
+                                    ),
                                     style = ArflixTypography.body.copy(
                                         fontSize = 16.sp,
                                         fontWeight = FontWeight.Medium
@@ -459,9 +465,9 @@ fun StreamSelector(
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
                                     text = if (!hasStreamingAddons)
-                                        "Go to Settings \u2192 Addons to add\na streaming addon"
+                                        stringResource(R.string.go_to_settings_addons_to_add_a_streaming_addon)
                                     else
-                                        "Try adding more addons",
+                                        stringResource(R.string.try_adding_more_addons),
                                     style = ArflixTypography.caption.copy(fontSize = 12.sp),
                                     color = TextSecondary.copy(alpha = 0.6f),
                                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -508,7 +514,7 @@ fun StreamSelector(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = title.ifEmpty { "Select Source" },
+                                text = title.ifEmpty { stringResource(R.string.select_source) },
                                 style = ArflixTypography.body.copy(
                                     fontSize = 18.sp,
                                     fontWeight = FontWeight.Bold
@@ -518,7 +524,7 @@ fun StreamSelector(
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = "${streams.size} sources available",
+                                text = stringResource(R.string.sources_available, streams.size),
                                 style = ArflixTypography.caption.copy(fontSize = 12.sp),
                                 color = TextSecondary
                             )
@@ -533,7 +539,7 @@ fun StreamSelector(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Close,
-                                contentDescription = "Close",
+                                contentDescription = stringResource(R.string.button_close),
                                 tint = TextPrimary,
                                 modifier = Modifier.size(20.dp)
                             )
@@ -594,7 +600,7 @@ fun StreamSelector(
                                 LoadingIndicator(color = Pink, size = 40.dp)
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Text(
-                                    text = "Finding sources...",
+                                    text = stringResource(R.string.finding_sources),
                                     style = ArflixTypography.body.copy(fontSize = 14.sp),
                                     color = TextSecondary
                                 )
@@ -640,9 +646,9 @@ fun StreamSelector(
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
                                     text = if (!hasStreamingAddons)
-                                        "Go to Settings \u2192 Addons to add\na streaming addon"
+                                        stringResource(R.string.go_to_settings_addons_to_add_a_streaming_addon)
                                     else
-                                        "Try adding more addons",
+                                        stringResource(R.string.try_adding_more_addons),
                                     style = ArflixTypography.caption.copy(fontSize = 12.sp),
                                     color = TextSecondary.copy(alpha = 0.6f),
                                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -957,7 +963,7 @@ private fun MobileStreamCard(
             ) {
                 Icon(
                     imageVector = Icons.Default.Check,
-                    contentDescription = "Selected",
+                    contentDescription = stringResource(R.string.selected),
                     tint = Color.Black,
                     modifier = Modifier.size(14.dp)
                 )
@@ -1076,7 +1082,7 @@ private fun GlassyStreamCard(
             ) {
                 Icon(
                     imageVector = Icons.Default.PlayArrow,
-                    contentDescription = "Play",
+                    contentDescription = stringResource(R.string.play),
                     tint = if (isFocused) Color.Black else Color.White.copy(alpha = 0.75f),
                     modifier = Modifier.size(18.dp)
                 )
@@ -1120,7 +1126,7 @@ private fun GlassyStreamCard(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Check,
-                        contentDescription = "Selected",
+                        contentDescription = stringResource(R.string.selected),
                         tint = Color.Black,
                         modifier = Modifier.size(14.dp)
                     )

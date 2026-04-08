@@ -78,6 +78,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -104,6 +105,7 @@ import androidx.media3.ui.PlayerView
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
+import com.arflix.tv.R
 import coil.request.ImageRequest
 import coil.size.Precision
 import com.arflix.tv.data.model.IptvChannel
@@ -788,7 +790,7 @@ fun TvScreen(
                                 if (nowProg != null) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
-                                            text = "NOW",
+                                            text = stringResource(id = R.string.now),
                                             style = ArflixTypography.caption.copy(fontSize = if (isMobile) 8.sp else 9.sp, fontWeight = FontWeight.Bold),
                                             color = Color.Black,
                                             modifier = Modifier
@@ -817,7 +819,7 @@ fun TvScreen(
                                     Spacer(modifier = Modifier.height(if (isMobile) 4.dp else 6.dp))
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
-                                            text = "NEXT",
+                                            text = stringResource(id = R.string.next),
                                             style = ArflixTypography.caption.copy(fontSize = if (isMobile) 8.sp else 9.sp, fontWeight = FontWeight.Bold),
                                             color = Color.White.copy(alpha = 0.7f),
                                             modifier = Modifier
@@ -847,7 +849,7 @@ fun TvScreen(
                                     Spacer(modifier = Modifier.height(if (isMobile) 3.dp else 4.dp))
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
-                                            text = "LATER",
+                                            text = stringResource(id = R.string.later),
                                             style = ArflixTypography.caption.copy(fontSize = if (isMobile) 8.sp else 9.sp),
                                             color = Color.White.copy(alpha = 0.4f),
                                             modifier = Modifier
@@ -877,7 +879,7 @@ fun TvScreen(
                                     contentAlignment = Alignment.CenterStart
                                 ) {
                                     Text(
-                                        "Select a channel",
+                                        stringResource(id = R.string.select_channel),
                                         style = ArflixTypography.body.copy(fontSize = if (isMobile) 12.sp else 14.sp),
                                         color = Color.White.copy(alpha = 0.2f)
                                     )
@@ -1212,10 +1214,10 @@ private fun GroupRailItem(
             onDismissRequest = onDismissMenu,
             modifier = Modifier.background(Color.Black.copy(alpha = 0.95f))
         ) {
-            FocusableMenuItem(if (isFavorite) "Unfavorite" else "Favorite", if (isFavorite) Icons.Default.StarOutline else Icons.Default.Star, Color(0xFFF5C518)) { onDismissMenu(); onToggleFavorite() }
-            FocusableMenuItem("Hide", Icons.Default.VisibilityOff) { onDismissMenu(); onToggleHidden() }
-            FocusableMenuItem("Move Up", Icons.Default.KeyboardArrowUp) { onDismissMenu(); onMoveUp() }
-            FocusableMenuItem("Move Down", Icons.Default.KeyboardArrowDown) { onDismissMenu(); onMoveDown() }
+            FocusableMenuItem(if (isFavorite) stringResource(R.string.unfavorite) else stringResource(R.string.favorite), if (isFavorite) Icons.Default.StarOutline else Icons.Default.Star, Color(0xFFF5C518)) { onDismissMenu(); onToggleFavorite() }
+            FocusableMenuItem(stringResource(R.string.hide), Icons.Default.VisibilityOff) { onDismissMenu(); onToggleHidden() }
+            FocusableMenuItem(stringResource(R.string.move_up), Icons.Default.KeyboardArrowUp) { onDismissMenu(); onMoveUp() }
+            FocusableMenuItem(stringResource(R.string.move_down), Icons.Default.KeyboardArrowDown) { onDismissMenu(); onMoveDown() }
         }
     }
     }
@@ -1320,7 +1322,7 @@ private fun FullscreenEpgOverlay(
                 if (nowProgram != null) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "NOW",
+                            text = stringResource(R.string.now),
                             style = ArflixTypography.caption.copy(fontWeight = FontWeight.Bold, fontSize = if (isMobile) 10.sp else 12.sp),
                             color = Color.Black,
                             modifier = Modifier
@@ -1378,7 +1380,7 @@ private fun FullscreenEpgOverlay(
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "LIVE",
+                            text = stringResource(R.string.tv_live).uppercase(),
                             style = ArflixTypography.caption.copy(fontWeight = FontWeight.Bold, fontSize = if (isMobile) 10.sp else 12.sp),
                             color = Color.Black,
                             modifier = Modifier
@@ -1398,7 +1400,7 @@ private fun FullscreenEpgOverlay(
                     Spacer(modifier = Modifier.height(if (isMobile) 8.dp else 12.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "NEXT",
+                            text = stringResource(R.string.tv_next).uppercase(),
                             style = ArflixTypography.caption.copy(fontWeight = FontWeight.Bold, fontSize = if (isMobile) 9.sp else 11.sp),
                             color = Color.White.copy(alpha = 0.8f),
                             modifier = Modifier
@@ -1465,7 +1467,7 @@ private fun GuidePanel(
         if (channels.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
-                    text = if (isLoading) "Loading channels..." else "No channels in this group",
+                    text = if (isLoading) stringResource(R.string.loading_channels) else stringResource(R.string.no_channels_in_this_group),
                     style = ArflixTypography.body,
                     color = Color.White.copy(alpha = 0.3f)
                 )
@@ -1669,7 +1671,7 @@ private fun GuideChannelRow(
                 )
                 if (isPlaying) {
                     Text(
-                        text = "LIVE",
+                        text = stringResource(R.string.tv_live).uppercase(),
                         style = ArflixTypography.caption.copy(fontSize = if (isMobile) 7.sp else 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp),
                         color = AccentGreen,
                         maxLines = 1
@@ -1980,10 +1982,10 @@ private fun NotConfiguredPanel() {
                 modifier = Modifier.size(40.dp)
             )
             Spacer(modifier = Modifier.height(12.dp))
-            Text("IPTV is not configured", style = ArflixTypography.sectionTitle, color = TextPrimary)
+            Text(stringResource(R.string.tv_not_configured), style = ArflixTypography.sectionTitle, color = TextPrimary)
             Spacer(modifier = Modifier.height(6.dp))
             Text(
-                "Open Settings and add your M3U URL.",
+                stringResource(R.string.tv_not_configured_desc),
                 style = ArflixTypography.body,
                 color = TextSecondary
             )

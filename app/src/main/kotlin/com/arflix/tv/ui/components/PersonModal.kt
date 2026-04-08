@@ -52,6 +52,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -62,6 +63,7 @@ import androidx.tv.foundation.lazy.list.itemsIndexed
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
+import com.arflix.tv.R
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.data.model.PersonDetails
@@ -277,7 +279,7 @@ fun PersonModal(
                         // Biography section
                         if (person.biography.isNotEmpty()) {
                             Text(
-                                text = "Biography",
+                                text = stringResource(R.string.biography),
                                 style = ArflixTypography.sectionTitle.copy(
                                     fontSize = 18.sp,
                                     fontWeight = FontWeight.Medium,
@@ -312,7 +314,7 @@ fun PersonModal(
                             }
 
                             Text(
-                                text = "Known For",
+                                text = stringResource(R.string.known_for),
                                 style = ArflixTypography.sectionTitle.copy(
                                     fontSize = 18.sp,
                                     fontWeight = FontWeight.Medium,
@@ -373,7 +375,7 @@ private fun MobilePersonContent(
         ) {
             Icon(
                 imageVector = Icons.Default.ArrowBack,
-                contentDescription = "Back",
+                contentDescription = stringResource(R.string.back),
                 tint = Color.White,
                 modifier = Modifier.size(20.dp)
             )
@@ -450,7 +452,7 @@ private fun MobilePersonContent(
         if (person.biography.isNotEmpty()) {
             Spacer(modifier = Modifier.height(24.dp))
             Text(
-                text = "Biography",
+                text = stringResource(R.string.biography),
                 style = ArflixTypography.sectionTitle.copy(fontSize = 16.sp, fontWeight = FontWeight.Medium),
                 color = TextPrimary.copy(alpha = 0.9f)
             )
@@ -466,7 +468,7 @@ private fun MobilePersonContent(
         if (person.knownFor.isNotEmpty()) {
             Spacer(modifier = Modifier.height(24.dp))
             Text(
-                text = "Known For",
+                text = stringResource(R.string.known_for),
                 style = ArflixTypography.sectionTitle.copy(fontSize = 16.sp, fontWeight = FontWeight.Medium),
                 color = TextPrimary.copy(alpha = 0.9f)
             )
@@ -601,7 +603,7 @@ private fun HorizontalKnownForCard(
                                 .background(Color.White.copy(alpha = 0.5f), CircleShape)
                         )
                         Text(
-                            text = if (item.mediaType == MediaType.TV) "TV Series" else "Movie",
+                            text = if (item.mediaType == MediaType.TV) stringResource(R.string.tv_series) else stringResource(R.string.movie),
                             style = ArflixTypography.caption.copy(fontSize = 11.sp),
                             color = Color.White.copy(alpha = 0.7f)
                         )
@@ -630,7 +632,7 @@ private fun HorizontalKnownForCard(
         if (item.character.isNotEmpty()) {
             Spacer(modifier = Modifier.height(6.dp))
             Text(
-                text = "as ${item.character}",
+                text = stringResource(R.string.character_as, item.character),
                 style = ArflixTypography.caption.copy(
                     fontSize = 11.sp,
                     fontStyle = androidx.compose.ui.text.font.FontStyle.Italic

@@ -22,12 +22,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
+import com.arflix.tv.R
 import coil.request.ImageRequest
 import coil.size.Precision
 import androidx.compose.ui.platform.LocalContext
@@ -115,7 +117,7 @@ fun ContinueWatchingCard(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.PlayArrow,
-                                contentDescription = "Play",
+                                contentDescription = stringResource(R.string.play),
                                 tint = ArvioSkin.colors.textPrimary,
                                 modifier = Modifier.size(32.dp),
                             )
@@ -162,7 +164,7 @@ fun ContinueWatchingCard(
                     }
                 }
 
-                val typeLabel = if (item.mediaType == MediaType.TV) "TV" else "MOVIE"
+                val typeLabel = if (item.mediaType == MediaType.TV) stringResource(R.string.tv_menu) else stringResource(R.string.movie).toUpperCase()
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopStart)
